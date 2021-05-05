@@ -1,7 +1,4 @@
-use frame_support::{
-	pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io,
-	sp_runtime::traits::AccountIdConversion, PalletId,
-};
+use frame_support::{pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io, PalletId};
 use pallet_chainlink_feed::*;
 use sp_core::H256;
 use sp_runtime::{
@@ -196,7 +193,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 		.build_storage::<Test>()
 		.unwrap();
 
-	let pallet_account: AccountId = FeedPalletId::get().into_account();
+	// 42, see `./tests.rs:9`
+	let pallet_account: AccountId = ChainlinkFeed::into_account(42);
 	pallet_balances::GenesisConfig::<Test> {
 		balances: vec![(pallet_account, 100 * MIN_RESERVE)],
 	}

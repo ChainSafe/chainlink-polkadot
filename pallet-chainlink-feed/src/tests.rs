@@ -1,10 +1,11 @@
 use super::*;
 use crate::{mock::*, Error};
-use frame_support::sp_runtime::traits::AccountIdConversion;
 use frame_support::traits::Currency;
 use frame_support::{assert_noop, assert_ok, sp_runtime::traits::Zero};
 
 type Balances = pallet_balances::Pallet<Test>;
+
+const FEED_ID: u16 = 42;
 
 #[test]
 fn feed_creation_should_work() {
@@ -868,31 +869,48 @@ fn payment_withdrawal_should_work() {
 			},
 		);
 		assert_noop!(
-			ChainlinkFeed::withdraw_payment(Origin::signed(admin), 123, recipient, amount),
+			ChainlinkFeed::withdraw_payment(Origin::signed(admin), 123, recipient, amount, FEED_ID),
 			Error::<Test>::OracleNotFound
 		);
 		assert_noop!(
-			ChainlinkFeed::withdraw_payment(Origin::signed(123), oracle, recipient, amount),
+			ChainlinkFeed::withdraw_payment(
+				Origin::signed(123),
+				oracle,
+				recipient,
+				amount,
+				FEED_ID
+			),
 			Error::<Test>::NotAdmin
 		);
 		assert_noop!(
-			ChainlinkFeed::withdraw_payment(Origin::signed(admin), oracle, recipient, 2 * amount),
+			ChainlinkFeed::withdraw_payment(
+				Origin::signed(admin),
+				oracle,
+				recipient,
+				2 * amount,
+				FEED_ID
+			),
 			Error::<Test>::InsufficientFunds
 		);
-		let fund = FeedPalletId::get().into_account();
+		let fund = ChainlinkFeed::into_account(FEED_ID);
 		let fund_balance = Balances::free_balance(&fund);
 		Balances::make_free_balance_be(&fund, ExistentialDeposit::get());
-		assert!(
-			ChainlinkFeed::withdraw_payment(Origin::signed(admin), oracle, recipient, amount)
-				.is_err()
-		);
+		assert!(ChainlinkFeed::withdraw_payment(
+			Origin::signed(admin),
+			oracle,
+			recipient,
+			amount,
+			FEED_ID
+		)
+		.is_err());
 		Balances::make_free_balance_be(&fund, fund_balance);
 
 		assert_ok!(ChainlinkFeed::withdraw_payment(
 			Origin::signed(admin),
 			oracle,
 			recipient,
-			amount
+			amount,
+			FEED_ID,
 		));
 	});
 }
@@ -902,23 +920,34 @@ fn funds_withdrawal_should_work() {
 	new_test_ext().execute_with(|| {
 		let amount = 50;
 		let recipient = 5;
-		let fund = FeedPalletId::get().into_account();
+		let fund = ChainlinkFeed::into_account(FEED_ID);
 		assert_noop!(
-			ChainlinkFeed::withdraw_funds(Origin::signed(123), recipient, amount),
+			ChainlinkFeed::withdraw_funds(Origin::signed(123), recipient, amount, FEED_ID),
 			Error::<Test>::NotPalletAdmin
 		);
 		assert_noop!(
-			ChainlinkFeed::withdraw_funds(Origin::signed(fund), recipient, 101 * MIN_RESERVE),
+			ChainlinkFeed::withdraw_funds(
+				Origin::signed(fund),
+				recipient,
+				101 * MIN_RESERVE,
+				FEED_ID
+			),
 			Error::<Test>::InsufficientFunds
 		);
 		assert_noop!(
-			ChainlinkFeed::withdraw_funds(Origin::signed(fund), recipient, 100 * MIN_RESERVE),
+			ChainlinkFeed::withdraw_funds(
+				Origin::signed(fund),
+				recipient,
+				100 * MIN_RESERVE,
+				FEED_ID
+			),
 			Error::<Test>::InsufficientReserve
 		);
 		assert_ok!(ChainlinkFeed::withdraw_funds(
 			Origin::signed(fund),
 			recipient,
-			amount
+			amount,
+			FEED_ID
 		));
 	});
 }
@@ -927,7 +956,7 @@ fn funds_withdrawal_should_work() {
 fn transfer_pallet_admin_should_work() {
 	new_test_ext().execute_with(|| {
 		let new_admin = 23;
-		let fund = FeedPalletId::get().into_account();
+		let fund = ChainlinkFeed::into_account(42);
 		assert_noop!(
 			ChainlinkFeed::transfer_pallet_admin(Origin::signed(123), new_admin),
 			Error::<Test>::NotPalletAdmin
@@ -1065,7 +1094,7 @@ fn prune_should_work() {
 #[test]
 fn feed_creation_permissioning() {
 	new_test_ext().execute_with(|| {
-		let admin = FeedPalletId::get().into_account();
+		let admin = ChainlinkFeed::into_account(42);
 		let new_creator = 15;
 		assert_noop!(
 			FeedBuilder::new().owner(new_creator).build_and_store(),
@@ -1098,7 +1127,7 @@ fn feed_creation_permissioning() {
 #[test]
 fn can_go_into_debt_and_repay() {
 	new_test_ext().execute_with(|| {
-		let admin: AccountId = FeedPalletId::get().into_account();
+		let admin: AccountId = ChainlinkFeed::into_account(FEED_ID);
 		let owner = 1;
 		let oracle = 2;
 		let payment = 33;
@@ -1115,11 +1144,19 @@ fn can_go_into_debt_and_repay() {
 		let new_funds = 2 * payment;
 		Balances::make_free_balance_be(&admin, new_funds);
 		// should be possible to reduce debt partially
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(admin), 10));
+		assert_ok!(ChainlinkFeed::reduce_debt(
+			Origin::signed(admin),
+			10,
+			FEED_ID
+		));
 		assert_eq!(Balances::free_balance(admin), new_funds - 10);
 		assert_eq!(ChainlinkFeed::debt(), payment - 10);
 		// should be possible to overshoot in passing the amount correcting debt...
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(42), payment));
+		assert_ok!(ChainlinkFeed::reduce_debt(
+			Origin::signed(42),
+			payment,
+			FEED_ID
+		));
 		// ... but will only correct the debt
 		assert_eq!(Balances::free_balance(admin), new_funds - payment);
 		assert_eq!(ChainlinkFeed::debt(), 0);

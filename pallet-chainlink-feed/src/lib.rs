@@ -512,7 +512,7 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		/// Convert `T::FeedId` into account
-		fn into_account(feed_id: T::FeedId) -> T::AccountId {
+		pub fn into_account(feed_id: T::FeedId) -> T::AccountId {
 			let conv: crate::types::AccountIdConverter<T::FeedId> = feed_id.into();
 			conv.into_account()
 		}
