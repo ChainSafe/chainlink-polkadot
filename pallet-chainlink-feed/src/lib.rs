@@ -250,7 +250,13 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		/// Type for feed indexing.
-		type FeedId: Member + Parameter + Default + Copy + HasCompact + BaseArithmetic;
+		type FeedId: Member
+			+ Parameter
+			+ Default
+			+ Copy
+			+ HasCompact
+			+ BaseArithmetic
+			+ AccountIdConversion<Self::AccountId>;
 
 		/// Oracle feed values.
 		type Value: Member + Parameter + Default + Copy + HasCompact + PartialEq + BaseArithmetic;
@@ -730,7 +736,7 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
-				T::Currency::reserve(&T::PalletId::get().into_account(), payment).or_else(
+				T::Currency::reserve(&feed_id.into_account(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
 						Debt::<T>::try_mutate(|debt| {
