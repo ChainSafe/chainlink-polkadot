@@ -252,7 +252,6 @@ pub mod pallet {
 
 		/// Type for feed indexing.
 		type FeedId: Member + Parameter + Default + Copy + HasCompact + BaseArithmetic;
-		// + AccountIdConversion<Self::AccountId>;
 
 		/// Oracle feed values.
 		type Value: Member + Parameter + Default + Copy + HasCompact + PartialEq + BaseArithmetic;
