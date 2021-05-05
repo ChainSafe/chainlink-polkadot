@@ -3,7 +3,7 @@ use codec::{Decode, Encode};
 use sp_arithmetic::traits::BaseArithmetic;
 use sp_runtime::TypeId;
 
-/// Convert a number to account id
+/// Convert a number into an account
 #[derive(Encode, Decode, Default)]
 pub struct AccountIdConverter<T: BaseArithmetic>(T);
 

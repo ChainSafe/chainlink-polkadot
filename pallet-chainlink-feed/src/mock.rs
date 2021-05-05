@@ -1,4 +1,4 @@
-use frame_support::{pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io, PalletId};
+use frame_support::{pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io};
 use pallet_chainlink_feed::*;
 use sp_core::H256;
 use sp_runtime::{
@@ -79,7 +79,6 @@ impl pallet_balances::Config for Test {
 pub(crate) const MIN_RESERVE: u64 = 100;
 
 parameter_types! {
-	pub const FeedPalletId: PalletId = PalletId(*b"linkfeed");
 	pub const MinimumReserve: u64 = MIN_RESERVE;
 	pub const StringLimit: u32 = 15;
 	pub const OracleLimit: u32 = 10;
@@ -95,7 +94,6 @@ impl pallet_chainlink_feed::Config for Test {
 	type FeedId = FeedId;
 	type Value = Value;
 	type Currency = Balances;
-	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
 	type OracleCountLimit = OracleLimit;

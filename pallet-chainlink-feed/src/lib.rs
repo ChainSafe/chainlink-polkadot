@@ -25,7 +25,7 @@ pub mod pallet {
 		ensure,
 		pallet_prelude::*,
 		weights::Weight,
-		PalletId, Parameter, RuntimeDebug,
+		Parameter, RuntimeDebug,
 	};
 	use frame_system::ensure_signed;
 	use frame_system::pallet_prelude::*;
@@ -259,9 +259,6 @@ pub mod pallet {
 
 		/// Interface used for balance transfers.
 		type Currency: ReservableCurrency<Self::AccountId>;
-
-		/// The module id used to determine the account for storing the funds used to pay the oracles.
-		type PalletId: Get<PalletId>;
 
 		/// The minimum amount of funds that need to be present in the fund account.
 		type MinimumReserve: Get<BalanceOf<Self>>;

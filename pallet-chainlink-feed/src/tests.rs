@@ -956,7 +956,7 @@ fn funds_withdrawal_should_work() {
 fn transfer_pallet_admin_should_work() {
 	new_test_ext().execute_with(|| {
 		let new_admin = 23;
-		let fund = ChainlinkFeed::into_account(42);
+		let fund = ChainlinkFeed::into_account(FEED_ID);
 		assert_noop!(
 			ChainlinkFeed::transfer_pallet_admin(Origin::signed(123), new_admin),
 			Error::<Test>::NotPalletAdmin
@@ -1094,7 +1094,7 @@ fn prune_should_work() {
 #[test]
 fn feed_creation_permissioning() {
 	new_test_ext().execute_with(|| {
-		let admin = ChainlinkFeed::into_account(42);
+		let admin = ChainlinkFeed::into_account(FEED_ID);
 		let new_creator = 15;
 		assert_noop!(
 			FeedBuilder::new().owner(new_creator).build_and_store(),
@@ -1153,7 +1153,7 @@ fn can_go_into_debt_and_repay() {
 		assert_eq!(ChainlinkFeed::debt(), payment - 10);
 		// should be possible to overshoot in passing the amount correcting debt...
 		assert_ok!(ChainlinkFeed::reduce_debt(
-			Origin::signed(42),
+			Origin::signed(FEED_ID),
 			payment,
 			FEED_ID
 		));
