@@ -10,6 +10,7 @@ mod benchmarking;
 mod mock;
 #[cfg(test)]
 mod tests;
+pub mod traits;
 
 pub mod default_weights;
 mod utils;
@@ -35,7 +36,10 @@ pub mod pallet {
 	use sp_std::convert::{TryFrom, TryInto};
 	use sp_std::prelude::*;
 
-	use crate::utils::{median, with_transaction_result};
+	use crate::{
+		traits::OnAnswerHandler,
+		utils::{median, with_transaction_result},
+	};
 
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -275,6 +279,9 @@ pub mod pallet {
 
 		/// Number of rounds to keep around per feed.
 		type PruningWindow: Get<RoundId>;
+
+		/// Callback in `submit`
+		type OnAnswerHandler: OnAnswerHandler<Self>;
 
 		/// The weight for this pallet's extrinsics.
 		type WeightInfo: WeightInfo;
@@ -711,7 +718,7 @@ pub mod pallet {
 					let updated_at = frame_system::Pallet::<T>::block_number();
 					round.updated_at = Some(updated_at);
 					round.answered_in_round = Some(round_id);
-					Rounds::<T>::insert(feed_id, round_id, round);
+					Rounds::<T>::insert(feed_id, round_id, round.clone());
 
 					feed.config.latest_round = round_id;
 					if feed.config.first_valid_round.is_none() {
@@ -723,6 +730,7 @@ pub mod pallet {
 						Details::<T>::remove(feed_id, prev_round_id);
 					}
 
+					T::OnAnswerHandler::on_answer(feed_id, round);
 					Self::deposit_event(Event::AnswerUpdated(
 						feed_id, round_id, new_answer, updated_at,
 					));

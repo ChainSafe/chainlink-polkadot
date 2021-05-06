@@ -79,6 +79,21 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = ();
 }
 
+/// A dimmy struct with trait `OnAnswerHandler`
+pub struct OnAnswerHandler;
+
+impl pallet_chainlink_feed::traits::OnAnswerHandler<Test> for OnAnswerHandler {
+	fn on_answer(
+		_feed: <Test as pallet_chainlink_feed::Config>::FeedId,
+		_new_data: pallet_chainlink_feed::Round<
+			<Test as frame_system::Config>::BlockNumber,
+			<Test as pallet_chainlink_feed::Config>::Value,
+		>,
+	) {
+		// do_nothing
+	}
+}
+
 pub(crate) const MIN_RESERVE: u64 = 100;
 
 parameter_types! {
@@ -101,6 +116,7 @@ impl pallet_chainlink_feed::Config for Test {
 	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
+	type OnAnswerHandler = OnAnswerHandler;
 	type OracleCountLimit = OracleLimit;
 	type FeedLimit = FeedLimit;
 	type PruningWindow = PruningWindow;

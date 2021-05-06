@@ -280,6 +280,20 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
+pub struct OnAnswerHandler;
+
+impl pallet_chainlink_feed::traits::OnAnswerHandler<Runtime> for OnAnswerHandler {
+	fn on_answer(
+		_feed: <Runtime as pallet_chainlink_feed::Config>::FeedId,
+		_new_data: pallet_chainlink_feed::Round<
+			    <Runtime as frame_system::Config>::BlockNumber,
+			<Runtime as pallet_chainlink_feed::Config>::Value,
+		    >,
+	) {
+		// do_nothing
+	}
+}
+
 pub type FeedId = u32;
 pub type Value = u128;
 
@@ -300,6 +314,7 @@ impl pallet_chainlink_feed::Config for Runtime {
 	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
+    type OnAnswerHandler = OnAnswerHandler;
 	type OracleCountLimit = OracleCountLimit;
 	type FeedLimit = FeedLimit;
 	type PruningWindow = PruningWindow;
