@@ -1,10 +1,12 @@
 //! Traits
 use crate::{Config, Round};
 
-/// Callback while submiting a new value
 pub trait OnAnswerHandler<T: Config> {
-	/// This callback will be called in call `pallet_chainlink_feed::Call::submit`
-	fn on_answer(feed: T::FeedId, new_data: Round<T::BlockNumber, T::Value>)
-	where
-		Self: Sized;
+	fn on_answer(feed: T::FeedId, new_data: Round<T::BlockNumber, T::Value>);
+}
+
+impl<T: Config> OnAnswerHandler<T> for () {
+	fn on_answer(_feed: T::FeedId, _new_data: Round<T::BlockNumber, T::Value>) {
+		// do_nothing
+	}
 }
