@@ -195,6 +195,12 @@ pub mod pallet {
 		}
 	}
 
+	impl<T> Into<Error<T>> for RoundConversionError {
+		fn into(self) -> Error<T> {
+			<Error<T>>::RoundConversion
+		}
+	}
+
 	/// Trait for interacting with the feeds in the pallet.
 	pub trait FeedOracle<T: frame_system::Config> {
 		type FeedId: Parameter + BaseArithmetic;
@@ -510,6 +516,8 @@ pub mod pallet {
 		InvalidRound,
 		/// The calling account is not allowed to create feeds.
 		NotFeedCreator,
+		/// Round data conversion failed
+		RoundConversion,
 	}
 
 	#[pallet::hooks]
@@ -720,6 +728,13 @@ pub mod pallet {
 					round.answered_in_round = Some(round_id);
 					Rounds::<T>::insert(feed_id, round_id, round.clone());
 
+					// # Safty
+					//
+					// this will never fail, because we just filled every fields in
+					// last lines
+					let round_on_answer =
+						round.try_into().map_err(|_| <Error<T>>::RoundConversion)?;
+
 					feed.config.latest_round = round_id;
 					if feed.config.first_valid_round.is_none() {
 						feed.config.first_valid_round = Some(round_id);
@@ -730,7 +745,7 @@ pub mod pallet {
 						Details::<T>::remove(feed_id, prev_round_id);
 					}
 
-					T::OnAnswerHandler::on_answer(feed_id, round);
+					T::OnAnswerHandler::on_answer(feed_id, round_on_answer);
 					Self::deposit_event(Event::AnswerUpdated(
 						feed_id, round_id, new_answer, updated_at,
 					));
