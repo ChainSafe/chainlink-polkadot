@@ -286,7 +286,7 @@ pub mod pallet {
 		/// Number of rounds to keep around per feed.
 		type PruningWindow: Get<RoundId>;
 
-		/// Callback in `submit`
+		/// This callback will trigger when the round answer updates
 		type OnAnswerHandler: OnAnswerHandler<Self>;
 
 		/// The weight for this pallet's extrinsics.
@@ -433,6 +433,13 @@ pub mod pallet {
 		FeedCreator(T::AccountId),
 		/// The account is no longer allowed to create feeds. \[previously_creator\]
 		FeedCreatorRemoved(T::AccountId),
+		#[cfg(test)]
+		/// New round data
+		///
+		/// Note:
+		///
+		/// This is only for tests
+		NewData(T::FeedId, RoundData<T::BlockNumber, T::Value>),
 	}
 
 	#[pallet::error]
