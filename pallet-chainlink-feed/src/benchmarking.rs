@@ -3,7 +3,7 @@ use frame_benchmarking::{account, benchmarks, whitelisted_caller};
 use frame_support::traits::{Currency, Get};
 use frame_system::RawOrigin;
 use sp_runtime::traits::{AccountIdConversion, One, Zero};
-use sp_std::fmt::Debug;
+use sp_std::{fmt::Debug, vec, vec::Vec};
 
 use crate::Pallet as ChainlinkFeed;
 
