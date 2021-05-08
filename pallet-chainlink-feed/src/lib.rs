@@ -530,8 +530,6 @@ pub mod pallet {
 		InvalidRound,
 		/// The calling account is not allowed to create feeds.
 		NotFeedCreator,
-		/// Round data conversion failed
-		RoundConversion,
 	}
 
 	#[pallet::hooks]
