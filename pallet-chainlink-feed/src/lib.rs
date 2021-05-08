@@ -195,9 +195,16 @@ pub mod pallet {
 		}
 	}
 
-	impl<T> Into<Error<T>> for RoundConversionError {
-		fn into(self) -> Error<T> {
-			<Error<T>>::RoundConversion
+	impl<B, V> RoundData<B, V> {
+		/// Hard to use `Into` trait directly due to:
+		/// https://doc.rust-lang.org/reference/items/traits.html#object-safety
+		fn into_round(self) -> Round<B, V> {
+			Round {
+				started_at: self.started_at,
+				answer: Some(self.answer),
+				updated_at: Some(self.updated_at),
+				answered_in_round: Some(self.answered_in_round),
+			}
 		}
 	}
 
@@ -726,21 +733,18 @@ pub mod pallet {
 				// update round answer
 				let (min_count, max_count) = details.submission_count_bounds;
 				if details.submissions.len() >= min_count as usize {
-					let new_answer = median(&mut details.submissions);
-					let mut round =
-						Self::round(feed_id, round_id).ok_or(Error::<T>::RoundNotFound)?;
-					round.answer = Some(new_answer);
 					let updated_at = frame_system::Pallet::<T>::block_number();
-					round.updated_at = Some(updated_at);
-					round.answered_in_round = Some(round_id);
-					Rounds::<T>::insert(feed_id, round_id, round.clone());
+					let new_answer = median(&mut details.submissions);
+					let round = RoundData {
+						started_at: Self::round(feed_id, round_id)
+							.ok_or(Error::<T>::RoundNotFound)?
+							.started_at,
+						answer: new_answer,
+						updated_at,
+						answered_in_round: round_id,
+					};
 
-					// # Safty
-					//
-					// this will never fail, because we just filled every fields in
-					// last lines
-					let round_on_answer =
-						round.try_into().map_err(|_| <Error<T>>::RoundConversion)?;
+					Rounds::<T>::insert(feed_id, round_id, round.clone().into_round());
 
 					feed.config.latest_round = round_id;
 					if feed.config.first_valid_round.is_none() {
@@ -752,7 +756,7 @@ pub mod pallet {
 						Details::<T>::remove(feed_id, prev_round_id);
 					}
 
-					T::OnAnswerHandler::on_answer(feed_id, round_on_answer);
+					T::OnAnswerHandler::on_answer(feed_id, round);
 					Self::deposit_event(Event::AnswerUpdated(
 						feed_id, round_id, new_answer, updated_at,
 					));
