@@ -954,6 +954,93 @@ fn transfer_pallet_admin_should_work() {
 }
 
 #[test]
+fn auto_prune_should_work() {
+	new_test_ext().execute_with(|| {
+		let feed_id = 0;
+		let oracle_a = 2;
+		let oracle_b = 3;
+		let oracle_admin = 4;
+		let submission = 42;
+		let owner = 1;
+
+		assert_noop!(
+			ChainlinkFeed::create_feed(
+				Origin::signed(1),
+				20,
+				10,
+				(10, 1_000),
+				3,
+				5,
+				b"desc".to_vec(),
+				2,
+				vec![(1, 4), (2, 4), (3, 4)],
+				Some(0)
+			),
+			Error::<Test>::CannotPruneRoundZero
+		);
+
+		let submit_a = |r| {
+			assert_ok!(ChainlinkFeed::submit(
+				Origin::signed(oracle_a),
+				feed_id,
+				r,
+				submission
+			));
+		};
+		let submit_a_and_b = |r| {
+			submit_a(r);
+			assert_ok!(ChainlinkFeed::submit(
+				Origin::signed(oracle_b),
+				feed_id,
+				r,
+				submission
+			));
+		};
+
+		assert_ok!(FeedBuilder::new()
+			.owner(owner)
+			.timeout(1)
+			.min_submissions(2)
+			.restart_delay(0)
+			.oracles(vec![(oracle_a, oracle_admin), (oracle_b, oracle_admin)])
+			.pruning_window(2)
+			.build_and_store());
+
+		System::set_block_number(1);
+		submit_a_and_b(1);
+		System::set_block_number(2);
+		submit_a_and_b(2);
+
+		assert!(ChainlinkFeed::round(feed_id, 0).is_some());
+		assert!(ChainlinkFeed::round(feed_id, 1).is_some());
+		assert!(ChainlinkFeed::round(feed_id, 2).is_some());
+
+		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
+		assert_eq!(feed.first_valid_round(), Some(1));
+
+		System::set_block_number(3);
+		submit_a_and_b(3);
+		System::set_block_number(4);
+		submit_a_and_b(4);
+
+		assert!(ChainlinkFeed::round(feed_id, 0).is_some());
+		// only oldest round is pruned
+		assert!(ChainlinkFeed::round(feed_id, 1).is_none());
+		assert!(ChainlinkFeed::round(feed_id, 2).is_some());
+		assert!(ChainlinkFeed::round(feed_id, 3).is_some());
+
+		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
+		assert_eq!(feed.first_valid_round(), Some(2));
+
+		System::set_block_number(5);
+		submit_a_and_b(5);
+		assert!(ChainlinkFeed::round(feed_id, 2).is_none());
+		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
+		assert_eq!(feed.first_valid_round(), Some(3));
+	});
+}
+
+#[test]
 fn prune_should_work() {
 	// ## Pruning Testing Scenario
 	//
