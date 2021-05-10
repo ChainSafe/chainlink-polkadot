@@ -2,7 +2,10 @@ use super::*;
 use crate::{mock::*, Error};
 use frame_support::sp_runtime::traits::AccountIdConversion;
 use frame_support::traits::Currency;
-use frame_support::{assert_noop, assert_ok, sp_runtime::traits::Zero};
+use frame_support::{
+	assert_noop, assert_ok,
+	sp_runtime::traits::{One, Zero},
+};
 
 type Balances = pallet_balances::Pallet<Test>;
 
@@ -19,6 +22,7 @@ fn feed_creation_should_work() {
 			b"desc".to_vec(),
 			2,
 			vec![(1, 4), (2, 4), (3, 4)],
+			None
 		));
 	});
 }
@@ -1152,6 +1156,8 @@ fn feed_life_cylce() {
 			reporting_round: Zero::zero(),
 			first_valid_round: None,
 			oracle_count: Zero::zero(),
+			next_round_to_prune: One::one(),
+			pruning_window: RoundId::MAX,
 		};
 		let oracles = vec![(2, 2), (3, 3), (4, 4)];
 		{

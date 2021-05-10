@@ -59,10 +59,15 @@ pub mod pallet {
 		pub decimals: u8,
 		pub description: Vec<u8>,
 		pub restart_delay: RoundId,
+		/// The round oracles are currently reporting data for.
 		pub reporting_round: RoundId,
 		pub latest_round: RoundId,
 		pub first_valid_round: Option<RoundId>,
 		pub oracle_count: u32,
+		/// Number of rounds to keep in storage for this feed.
+		pub pruning_window: RoundId,
+		/// Keeps track of the round that should be pruned next.
+		pub next_round_to_prune: RoundId,
 	}
 
 	pub type FeedConfigOf<T> = FeedConfig<
@@ -526,6 +531,7 @@ pub mod pallet {
 			description: Vec<u8>,
 			restart_delay: RoundId,
 			oracles: Vec<(T::AccountId, T::AccountId)>,
+			pruning_window: Option<RoundId>,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
 			ensure!(
@@ -536,6 +542,9 @@ pub mod pallet {
 				description.len() as u32 <= T::StringLimit::get(),
 				Error::<T>::DescriptionTooLong
 			);
+
+			let pruning_window = pruning_window.unwrap_or(RoundId::MAX);
+			ensure!(pruning_window > 0, Error::<T>::CannotPruneRoundZero);
 
 			let submission_count_bounds = (min_submissions, oracles.len() as u32);
 
@@ -559,6 +568,8 @@ pub mod pallet {
 					reporting_round: Zero::zero(),
 					first_valid_round: None,
 					oracle_count: Zero::zero(),
+					pruning_window,
+					next_round_to_prune: RoundId::one(),
 				};
 				let mut feed = Feed::<T>::new(id, new_config); // synced on drop
 				let started_at = frame_system::Pallet::<T>::block_number();
@@ -1460,8 +1471,22 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Prune the state of a feed to reduce storage load.
+		fn prune_oldest(&mut self) {
+			let prune_next = self.config.next_round_to_prune;
+			// only prune if window is exceeded
+			if self.config.latest_round.saturating_sub(prune_next) >= self.config.pruning_window {
+				Rounds::<T>::remove(self.id, prune_next);
+				Details::<T>::remove(self.id, prune_next);
+				// update oldest round
+				self.config.next_round_to_prune += RoundId::one();
+				self.config.first_valid_round = Some(self.config.next_round_to_prune);
+			}
+		}
+
 		/// Initialize a new round.
 		/// Will close the previous one if it is timed out.
+		/// Will prune the oldest round that is outside the pruning window
 		///
 		/// **Warning:** Fallible function that changes storage.
 		fn initialize_round(
@@ -1487,6 +1512,9 @@ pub mod pallet {
 			);
 			let started_at = frame_system::Pallet::<T>::block_number();
 			Rounds::<T>::insert(self.id, new_round_id, Round::new(started_at));
+
+			// prune the oldest round
+			self.prune_oldest();
 
 			Ok(started_at)
 		}

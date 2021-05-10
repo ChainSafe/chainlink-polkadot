@@ -117,6 +117,7 @@ pub(crate) struct FeedBuilder {
 	description: Option<Vec<u8>>,
 	restart_delay: Option<RoundId>,
 	oracles: Option<Vec<(AccountId, AccountId)>>,
+	pruning_window: Option<RoundId>,
 }
 
 impl FeedBuilder {
@@ -164,6 +165,11 @@ impl FeedBuilder {
 		self
 	}
 
+	pub fn pruning_window(mut self, w: RoundId) -> Self {
+		self.pruning_window = Some(w);
+		self
+	}
+
 	pub fn build_and_store(self) -> DispatchResultWithPostInfo {
 		let owner = Origin::signed(self.owner.unwrap_or(1));
 		let payment = self.payment.unwrap_or(20);
@@ -186,6 +192,7 @@ impl FeedBuilder {
 			description,
 			restart_delay,
 			oracles,
+			self.pruning_window,
 		)
 	}
 }
