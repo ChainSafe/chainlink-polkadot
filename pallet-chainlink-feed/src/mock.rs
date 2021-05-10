@@ -87,7 +87,6 @@ parameter_types! {
 	pub const StringLimit: u32 = 15;
 	pub const OracleLimit: u32 = 10;
 	pub const FeedLimit: u16 = 10;
-	pub const PruningWindow: u32 = 3;
 }
 
 type FeedId = u16;
@@ -103,7 +102,6 @@ impl pallet_chainlink_feed::Config for Test {
 	type StringLimit = StringLimit;
 	type OracleCountLimit = OracleLimit;
 	type FeedLimit = FeedLimit;
-	type PruningWindow = PruningWindow;
 	type WeightInfo = ();
 }
 

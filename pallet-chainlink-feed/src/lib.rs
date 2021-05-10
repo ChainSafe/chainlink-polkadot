@@ -278,9 +278,6 @@ pub mod pallet {
 		/// Maximum number of feeds.
 		type FeedLimit: Get<Self::FeedId>;
 
-		/// Number of rounds to keep around per feed.
-		type PruningWindow: Get<RoundId>;
-
 		/// The weight for this pallet's extrinsics.
 		type WeightInfo: WeightInfo;
 	}
@@ -494,12 +491,6 @@ pub mod pallet {
 		NotPendingPalletAdmin,
 		/// Round zero is not allowed to be pruned.
 		CannotPruneRoundZero,
-		/// The given pruning bounds don't cause any pruning with the current state.
-		NothingToPrune,
-		/// There is no valid data, yet, so the conditions for pruning are not met.
-		NoValidRoundYet,
-		/// The pruning should leave the rounds story in a contiguous state (no gaps).
-		PruneContiguously,
 		/// The maximum number of feeds was reached.
 		FeedLimitReached,
 		/// The round cannot be superseded by a new round.
@@ -805,56 +796,6 @@ pub mod pallet {
 			feed.ensure_owner(&owner)?;
 
 			feed.update_future_rounds(payment, submission_count_bounds, restart_delay, timeout)?;
-
-			Ok(().into())
-		}
-
-		/// Prune the state of a feed to reduce storage load.
-		///
-		/// - Will update the `first_valid_round` to the most recent round kept.
-		/// - Will only prune until hitting the pruning window (which makes sure to keep N rounds
-		/// of data available).
-		///
-		/// Limited to the owner of a feed.
-		#[pallet::weight(T::WeightInfo::prune(keep_round.saturating_sub(* first_to_prune)))]
-		pub fn prune(
-			origin: OriginFor<T>,
-			feed_id: T::FeedId,
-			first_to_prune: RoundId,
-			keep_round: RoundId,
-		) -> DispatchResultWithPostInfo {
-			let owner = ensure_signed(origin)?;
-			ensure!(
-				first_to_prune > Zero::zero(),
-				Error::<T>::CannotPruneRoundZero
-			);
-			ensure!(keep_round > first_to_prune, Error::<T>::NothingToPrune);
-			let mut feed = Self::feed_config(feed_id).ok_or(Error::<T>::FeedNotFound)?;
-			ensure!(feed.owner == owner, Error::<T>::NotFeedOwner);
-			let first_valid_round = feed.first_valid_round.ok_or(Error::<T>::NoValidRoundYet)?;
-			ensure!(
-				first_to_prune <= first_valid_round,
-				Error::<T>::PruneContiguously
-			);
-			let pruning_window = T::PruningWindow::get();
-			ensure!(
-				feed.latest_round.saturating_sub(first_to_prune) > pruning_window,
-				Error::<T>::NothingToPrune
-			);
-
-			let keep_round = feed
-				.latest_round
-				.saturating_sub(pruning_window)
-				.min(keep_round);
-			let mut round = first_to_prune;
-			while round < keep_round {
-				Rounds::<T>::remove(feed_id, round);
-				Details::<T>::remove(feed_id, round);
-				round += RoundId::one();
-			}
-			feed.first_valid_round = Some(keep_round.max(first_valid_round));
-
-			Feeds::<T>::insert(feed_id, feed);
 
 			Ok(().into())
 		}
@@ -1635,7 +1576,6 @@ pub mod pallet {
 		fn submit_closing_answer(o: u32) -> Weight;
 		fn change_oracles(d: u32, n: u32) -> Weight;
 		fn update_future_rounds() -> Weight;
-		fn prune(r: u32) -> Weight;
 		fn set_requester() -> Weight;
 		fn remove_requester() -> Weight;
 		fn request_new_round() -> Weight;
