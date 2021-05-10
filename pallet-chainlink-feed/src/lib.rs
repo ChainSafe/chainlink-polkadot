@@ -46,7 +46,7 @@ pub mod pallet {
 	#[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug)]
 	pub struct FeedConfig<
 		AccountId: Parameter,
-		Balance: Parameter,
+		Balance: Parameter + Encode,
 		BlockNumber: Parameter,
 		Value: Parameter,
 	> {
@@ -63,6 +63,8 @@ pub mod pallet {
 		pub latest_round: RoundId,
 		pub first_valid_round: Option<RoundId>,
 		pub oracle_count: u32,
+		pub debt: Balance,
+		pub max_debt: Balance,
 	}
 
 	pub type FeedConfigOf<T> = FeedConfig<
@@ -250,13 +252,7 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		/// Type for feed indexing.
-		type FeedId: Member
-			+ Parameter
-			+ Default
-			+ Copy
-			+ HasCompact
-			+ BaseArithmetic
-			+ AccountIdConversion<Self::AccountId>;
+		type FeedId: Member + Parameter + Default + Copy + HasCompact + BaseArithmetic;
 
 		/// Oracle feed values.
 		type Value: Member + Parameter + Default + Copy + HasCompact + PartialEq + BaseArithmetic;
@@ -299,11 +295,6 @@ pub mod pallet {
 	// possible optimization: put together with admin?
 	/// The account to set as future pallet admin.
 	pub type PendingPalletAdmin<T: Config> = StorageValue<_, T::AccountId>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn debt)]
-	/// Tracks the amount of debt accrued by the pallet towards the oracles.
-	pub type Debt<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn feed_counter)]
@@ -514,6 +505,36 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
+	impl<T: Config> Pallet<T> {
+		/// Shortcut for getting account ID
+		fn account_id() -> T::AccountId {
+			T::PalletId::get().into_account()
+		}
+
+		/// Get debt by feed_id
+		pub fn debt(feed_id: T::FeedId) -> Result<BalanceOf<T>, Error<T>> {
+			if let Some(feed_config) = <Feeds<T>>::get(feed_id) {
+				Ok(feed_config.debt)
+			} else {
+				Err(<Error<T>>::FeedNotFound)
+			}
+		}
+
+		/// Try mutate debt by FeedId
+		pub fn try_mutate_debt(
+			feed_id: T::FeedId,
+			f: impl Fn(&mut BalanceOf<T>) -> DispatchResult,
+		) -> DispatchResult {
+			<Feeds<T>>::try_mutate(feed_id, |feed_config| {
+				if let Some(feed_config) = feed_config.as_mut() {
+					f(&mut feed_config.debt)
+				} else {
+					Err(<Error<T>>::FeedNotFound.into())
+				}
+			})
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		// --- feed operations ---
@@ -532,6 +553,7 @@ pub mod pallet {
 			description: Vec<u8>,
 			restart_delay: RoundId,
 			oracles: Vec<(T::AccountId, T::AccountId)>,
+			max_debt: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
 			ensure!(
@@ -565,6 +587,8 @@ pub mod pallet {
 					reporting_round: Zero::zero(),
 					first_valid_round: None,
 					oracle_count: Zero::zero(),
+					debt: Zero::zero(),
+					max_debt,
 				};
 				let mut feed = Feed::<T>::new(id, new_config); // synced on drop
 				let started_at = frame_system::Pallet::<T>::block_number();
@@ -736,10 +760,10 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
-				T::Currency::reserve(&feed_id.into_account(), payment).or_else(
+				T::Currency::reserve(&Self::account_id(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
-						Debt::<T>::try_mutate(|debt| {
+						Self::try_mutate_debt(feed_id, |debt| {
 							*debt = debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
 							Ok(())
 						})
@@ -1055,12 +1079,13 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::reduce_debt())]
 		pub fn reduce_debt(
 			origin: OriginFor<T>,
+			feed_id: T::FeedId,
 			amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
-			Debt::<T>::try_mutate(|debt| -> DispatchResult {
+			Self::try_mutate_debt(feed_id, |debt| -> DispatchResult {
 				let to_reserve = amount.min(*debt);
-				T::Currency::reserve(&T::PalletId::get().into_account(), to_reserve)?;
+				T::Currency::reserve(&Self::account_id(), to_reserve)?;
 				// it's fine if we saturate to 0 debt
 				*debt = debt.saturating_sub(amount);
 				Ok(())
