@@ -1,4 +1,7 @@
-use frame_support::{pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io};
+use frame_support::{
+	pallet_prelude::DispatchResultWithPostInfo, parameter_types, sp_io,
+	sp_runtime::traits::AccountIdConversion, PalletId,
+};
 use pallet_chainlink_feed::*;
 use sp_core::H256;
 use sp_runtime::{
@@ -79,6 +82,7 @@ impl pallet_balances::Config for Test {
 pub(crate) const MIN_RESERVE: u64 = 100;
 
 parameter_types! {
+	pub const FeedPalletId: PalletId = PalletId(*b"linkfeed");
 	pub const MinimumReserve: u64 = MIN_RESERVE;
 	pub const StringLimit: u32 = 15;
 	pub const OracleLimit: u32 = 10;
@@ -94,6 +98,7 @@ impl pallet_chainlink_feed::Config for Test {
 	type FeedId = FeedId;
 	type Value = Value;
 	type Currency = Balances;
+	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
 	type OracleCountLimit = OracleLimit;
@@ -191,8 +196,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 		.build_storage::<Test>()
 		.unwrap();
 
-	// 42, see `./tests.rs:9`
-	let pallet_account: AccountId = ChainlinkFeed::into_account(42);
+	let pallet_account: AccountId = FeedPalletId::get().into_account();
 	pallet_balances::GenesisConfig::<Test> {
 		balances: vec![(pallet_account, 100 * MIN_RESERVE)],
 	}

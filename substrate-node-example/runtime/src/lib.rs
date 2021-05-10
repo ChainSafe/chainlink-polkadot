@@ -297,6 +297,7 @@ impl pallet_chainlink_feed::Config for Runtime {
 	type FeedId = FeedId;
 	type Value = Value;
 	type Currency = Balances;
+	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
 	type OracleCountLimit = OracleCountLimit;

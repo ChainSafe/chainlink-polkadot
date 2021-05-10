@@ -12,7 +12,6 @@ mod mock;
 mod tests;
 
 pub mod default_weights;
-mod types;
 mod utils;
 
 #[frame_support::pallet]
@@ -25,7 +24,7 @@ pub mod pallet {
 		ensure,
 		pallet_prelude::*,
 		weights::Weight,
-		Parameter, RuntimeDebug,
+		PalletId, Parameter, RuntimeDebug,
 	};
 	use frame_system::ensure_signed;
 	use frame_system::pallet_prelude::*;
@@ -251,13 +250,22 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		/// Type for feed indexing.
-		type FeedId: Member + Parameter + Default + Copy + HasCompact + BaseArithmetic;
+		type FeedId: Member
+			+ Parameter
+			+ Default
+			+ Copy
+			+ HasCompact
+			+ BaseArithmetic
+			+ AccountIdConversion<Self::AccountId>;
 
 		/// Oracle feed values.
 		type Value: Member + Parameter + Default + Copy + HasCompact + PartialEq + BaseArithmetic;
 
 		/// Interface used for balance transfers.
 		type Currency: ReservableCurrency<Self::AccountId>;
+
+		/// The module id used to determine the account for storing the funds used to pay the oracles.
+		type PalletId: Get<PalletId>;
 
 		/// The minimum amount of funds that need to be present in the fund account.
 		type MinimumReserve: Get<BalanceOf<Self>>;
@@ -506,14 +514,6 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
-	impl<T: Config> Pallet<T> {
-		/// Convert `T::FeedId` into account
-		pub fn into_account(feed_id: T::FeedId) -> T::AccountId {
-			let conv: crate::types::AccountIdConverter<T::FeedId> = feed_id.into();
-			conv.into_account()
-		}
-	}
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		// --- feed operations ---
@@ -736,7 +736,7 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
-				T::Currency::reserve(&Self::into_account(feed_id), payment).or_else(
+				T::Currency::reserve(&feed_id.into_account(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
 						Debt::<T>::try_mutate(|debt| {
@@ -952,7 +952,6 @@ pub mod pallet {
 			oracle: T::AccountId,
 			recipient: T::AccountId,
 			amount: BalanceOf<T>,
-			feed_id: T::FeedId,
 		) -> DispatchResultWithPostInfo {
 			let admin = ensure_signed(origin)?;
 			let mut oracle_meta = Self::oracle(&oracle).ok_or(Error::<T>::OracleNotFound)?;
@@ -964,7 +963,7 @@ pub mod pallet {
 				.ok_or(Error::<T>::InsufficientFunds)?;
 
 			T::Currency::transfer(
-				&Self::into_account(feed_id),
+				&T::PalletId::get().into_account(),
 				&recipient,
 				amount,
 				ExistenceRequirement::KeepAlive,
@@ -1033,11 +1032,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			recipient: T::AccountId,
 			amount: BalanceOf<T>,
-			feed_id: T::FeedId,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 			ensure!(sender == Self::pallet_admin(), Error::<T>::NotPalletAdmin);
-			let fund = Self::into_account(feed_id);
+			let fund = T::PalletId::get().into_account();
 			let reserve = T::Currency::free_balance(&fund);
 			let new_reserve = reserve
 				.checked_sub(&amount)
@@ -1058,12 +1056,11 @@ pub mod pallet {
 		pub fn reduce_debt(
 			origin: OriginFor<T>,
 			amount: BalanceOf<T>,
-			feed_id: T::FeedId,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
 			Debt::<T>::try_mutate(|debt| -> DispatchResult {
 				let to_reserve = amount.min(*debt);
-				T::Currency::reserve(&Self::into_account(feed_id), to_reserve)?;
+				T::Currency::reserve(&T::PalletId::get().into_account(), to_reserve)?;
 				// it's fine if we saturate to 0 debt
 				*debt = debt.saturating_sub(amount);
 				Ok(())
