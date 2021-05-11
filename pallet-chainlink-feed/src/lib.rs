@@ -500,6 +500,8 @@ pub mod pallet {
 		InvalidRound,
 		/// The calling account is not allowed to create feeds.
 		NotFeedCreator,
+		/// The maximum debt of feeds was reached.
+		MaxDebtReached,
 	}
 
 	#[pallet::hooks]
@@ -523,11 +525,11 @@ pub mod pallet {
 		/// Try mutate debt by FeedId
 		pub fn try_mutate_debt(
 			feed_id: T::FeedId,
-			f: impl Fn(&mut BalanceOf<T>) -> DispatchResult,
+			f: impl Fn(&mut BalanceOf<T>, BalanceOf<T>) -> DispatchResult,
 		) -> DispatchResult {
 			<Feeds<T>>::try_mutate(feed_id, |feed_config| {
 				if let Some(feed_config) = feed_config.as_mut() {
-					f(&mut feed_config.debt)
+					f(&mut feed_config.debt, feed_config.max_debt)
 				} else {
 					Err(<Error<T>>::FeedNotFound.into())
 				}
@@ -760,15 +762,20 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
+				// track the debt in case we cannot reserve
 				T::Currency::reserve(&Self::account_id(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
-						Self::try_mutate_debt(feed_id, |debt| {
-							*debt = debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
+						Self::try_mutate_debt(feed_id, |debt, max_debt| {
+							let new_debt =
+								debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
+							ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
+							*debt = new_debt;
 							Ok(())
 						})
 					},
 				)?;
+
 				let mut oracle_meta = Self::oracle(&oracle).ok_or(Error::<T>::OracleNotFound)?;
 				oracle_meta.withdrawable = oracle_meta
 					.withdrawable
@@ -1083,7 +1090,7 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
-			Self::try_mutate_debt(feed_id, |debt| -> DispatchResult {
+			Self::try_mutate_debt(feed_id, |debt, _| -> DispatchResult {
 				let to_reserve = amount.min(*debt);
 				T::Currency::reserve(&Self::account_id(), to_reserve)?;
 				// it's fine if we saturate to 0 debt
