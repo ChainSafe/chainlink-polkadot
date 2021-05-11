@@ -46,7 +46,7 @@ pub mod pallet {
 	#[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug)]
 	pub struct FeedConfig<
 		AccountId: Parameter,
-		Balance: Parameter + Encode,
+		Balance: Parameter,
 		BlockNumber: Parameter,
 		Value: Parameter,
 	> {
