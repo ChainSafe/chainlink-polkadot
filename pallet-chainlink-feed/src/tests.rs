@@ -1099,6 +1099,7 @@ fn feed_creation_permissioning() {
 #[test]
 fn can_go_into_debt_and_repay() {
 	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
 		let admin: AccountId = FeedPalletId::get().into_account();
 		let owner = 1;
 		let oracle = 2;

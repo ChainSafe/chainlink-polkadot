@@ -63,7 +63,9 @@ pub mod pallet {
 		pub latest_round: RoundId,
 		pub first_valid_round: Option<RoundId>,
 		pub oracle_count: u32,
+		/// Current debt of this feed
 		pub debt: Balance,
+		/// The maximum debt limit of this feed
 		pub max_debt: Balance,
 	}
 
@@ -521,20 +523,6 @@ pub mod pallet {
 				Err(<Error<T>>::FeedNotFound)
 			}
 		}
-
-		/// Try mutate debt by FeedId
-		pub fn try_mutate_debt(
-			feed_id: T::FeedId,
-			f: impl Fn(&mut BalanceOf<T>, BalanceOf<T>) -> DispatchResult,
-		) -> DispatchResult {
-			<Feeds<T>>::try_mutate(feed_id, |feed_config| {
-				if let Some(feed_config) = feed_config.as_mut() {
-					f(&mut feed_config.debt, feed_config.max_debt)
-				} else {
-					Err(<Error<T>>::FeedNotFound.into())
-				}
-			})
-		}
 	}
 
 	#[pallet::call]
@@ -766,13 +754,13 @@ pub mod pallet {
 				T::Currency::reserve(&Self::account_id(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
-						Self::try_mutate_debt(feed_id, |debt, max_debt| {
-							let new_debt =
-								debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
-							ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
-							*debt = new_debt;
-							Ok(())
-						})
+						let mut new_debt = feed.config.debt.clone();
+						new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
+
+						ensure!(new_debt < feed.config.max_debt, <Error<T>>::MaxDebtReached);
+
+						feed.config.debt = new_debt;
+						Ok(())
 					},
 				)?;
 
@@ -1090,7 +1078,8 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
-			Self::try_mutate_debt(feed_id, |debt, _| -> DispatchResult {
+			let mut feed = <Feed<T>>::load_from(feed_id).ok_or(<Error<T>>::FeedNotFound)?;
+			feed.debt(|debt| -> DispatchResult {
 				let to_reserve = amount.min(*debt);
 				T::Currency::reserve(&Self::account_id(), to_reserve)?;
 				// it's fine if we saturate to 0 debt
@@ -1545,6 +1534,11 @@ pub mod pallet {
 			Details::<T>::remove(self.id, timed_out_id);
 
 			Ok(())
+		}
+
+		/// Mutate debt in config with closure
+		fn debt(&mut self, f: impl Fn(&mut BalanceOf<T>) -> DispatchResult) -> DispatchResult {
+			f(&mut self.config.debt)
 		}
 
 		/// Store the feed config in storage.
