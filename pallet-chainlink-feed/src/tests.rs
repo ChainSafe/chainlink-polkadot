@@ -1256,8 +1256,3 @@ fn feed_life_cylce() {
 		assert_eq!(ChainlinkFeed::feed_config(id).unwrap().reporting_round, 1);
 	});
 }
-
-#[test]
-fn check_require_transactional_works() {
-	new_test_ext().execute_with(|| {})
-}
