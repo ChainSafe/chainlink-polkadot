@@ -19,7 +19,7 @@ fn feed_creation_should_work() {
 			b"desc".to_vec(),
 			2,
 			vec![(1, 4), (2, 4), (3, 4)],
-			0
+			None,
 		));
 	});
 }
@@ -1156,7 +1156,7 @@ fn feed_life_cylce() {
 			first_valid_round: None,
 			oracle_count: Zero::zero(),
 			debt: Zero::zero(),
-			max_debt: Zero::zero(),
+			max_debt: None,
 		};
 		let oracles = vec![(2, 2), (3, 3), (4, 4)];
 		{

@@ -50,23 +50,40 @@ pub mod pallet {
 		BlockNumber: Parameter,
 		Value: Parameter,
 	> {
+		/// Owner of this feed
 		pub owner: AccountId,
+		/// The pending owner of this feed
 		pub pending_owner: Option<AccountId>,
+		/// Value bounds of oracle submissions
 		pub submission_value_bounds: (Value, Value),
+		/// Count bounds of oracle submissions
 		pub submission_count_bounds: (u32, u32),
+		/// Payment of oracle rounds
 		pub payment: Balance,
+		/// Timeout of rounds
 		pub timeout: BlockNumber,
+		/// Represents the number of decimals with which the feed is configured
 		pub decimals: u8,
+		/// The description of this feed
 		pub description: Vec<u8>,
+		/// The round initiation delay
 		pub restart_delay: RoundId,
+		/// The round oracles are currently reporting data for
 		pub reporting_round: RoundId,
+		/// The id of the latest round
 		pub latest_round: RoundId,
+		/// The id of the first round that contains non-default data
 		pub first_valid_round: Option<RoundId>,
+		/// The amount of the oracles in this feed
 		pub oracle_count: u32,
-		/// Current debt of this feed
+		/// Tracks the amount of debt accrued by the feed
+		/// towards the oracles.
 		pub debt: Balance,
-		/// The maximum debt limit of this feed
-		pub max_debt: Balance,
+		/// The debt limit of this feed
+		///
+		/// Could not submit new value to the feed when
+		/// debt accumulated to this limit.
+		pub max_debt: Option<Balance>,
 	}
 
 	pub type FeedConfigOf<T> = FeedConfig<
@@ -515,7 +532,7 @@ pub mod pallet {
 			T::PalletId::get().into_account()
 		}
 
-		/// Get debt by feed_id
+		/// Get debt by FeedId
 		pub fn debt(feed_id: T::FeedId) -> Result<BalanceOf<T>, Error<T>> {
 			if let Some(feed_config) = <Feeds<T>>::get(feed_id) {
 				Ok(feed_config.debt)
@@ -543,7 +560,7 @@ pub mod pallet {
 			description: Vec<u8>,
 			restart_delay: RoundId,
 			oracles: Vec<(T::AccountId, T::AccountId)>,
-			max_debt: BalanceOf<T>,
+			max_debt: Option<BalanceOf<T>>,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
 			ensure!(
@@ -757,7 +774,9 @@ pub mod pallet {
 						let mut new_debt = feed.config.debt.clone();
 						new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
 
-						ensure!(new_debt < feed.config.max_debt, <Error<T>>::MaxDebtReached);
+						if let Some(max_debt) = feed.config.max_debt {
+							ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
+						}
 
 						feed.config.debt = new_debt;
 						Ok(())

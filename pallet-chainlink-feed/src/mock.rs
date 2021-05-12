@@ -182,7 +182,7 @@ impl FeedBuilder {
 		let restart_delay = self
 			.restart_delay
 			.unwrap_or(oracles.len().saturating_sub(1) as u32);
-		let max_debt = self.max_debt.unwrap_or_default();
+		let max_debt = self.max_debt;
 		ChainlinkFeed::create_feed(
 			owner,
 			payment,
