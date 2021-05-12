@@ -219,3 +219,25 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
 	t.into()
 }
+
+#[macro_export]
+macro_rules! tx_assert_ok {
+	($e:expr) => {
+		with_transaction_result(|| -> Result<(), ()> {
+			assert_ok!($e);
+			Ok(())
+		})
+		.unwrap();
+	};
+}
+
+// #[macro_export]
+// macro_rules! tx_assert_noop {
+// 	($l:expr, $r:expr) => {
+// 		with_transaction_result(|| -> Result<(), ()> {
+// 			assert_noop!($l, $r);
+// 			Ok(())
+// 		})
+// 		.unwrap();
+// 	};
+// }
