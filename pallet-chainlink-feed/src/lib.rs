@@ -79,10 +79,9 @@ pub mod pallet {
 		/// Tracks the amount of debt accrued by the feed
 		/// towards the oracles.
 		pub debt: Balance,
-		/// The debt limit of this feed
+		/// The maximum allowed debt a feed can accumulate
 		///
-		/// Could not submit new value to the feed when
-		/// debt accumulated to this limit.
+		/// If this is a `None` value, the feed is not allowed to accumulate any debt
 		pub max_debt: Option<Balance>,
 	}
 
@@ -771,7 +770,7 @@ pub mod pallet {
 				T::Currency::reserve(&Self::account_id(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
-						let mut new_debt = feed.config.debt.clone();
+						let mut new_debt = feed.config.debt;
 						new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
 
 						if let Some(max_debt) = feed.config.max_debt {
@@ -1098,13 +1097,11 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
 			let mut feed = <Feed<T>>::load_from(feed_id).ok_or(<Error<T>>::FeedNotFound)?;
-			feed.debt(|debt| -> DispatchResult {
-				let to_reserve = amount.min(*debt);
-				T::Currency::reserve(&Self::account_id(), to_reserve)?;
-				// it's fine if we saturate to 0 debt
-				*debt = debt.saturating_sub(amount);
-				Ok(())
-			})?;
+
+			let to_reserve = amount.min(feed.config.debt);
+			T::Currency::reserve(&Self::account_id(), to_reserve)?;
+			// it's fine if we saturate to 0 debt
+			feed.config.debt = feed.config.debt.saturating_sub(amount);
 
 			Ok(().into())
 		}
@@ -1553,11 +1550,6 @@ pub mod pallet {
 			Details::<T>::remove(self.id, timed_out_id);
 
 			Ok(())
-		}
-
-		/// Mutate debt in config with closure
-		fn debt(&mut self, f: impl Fn(&mut BalanceOf<T>) -> DispatchResult) -> DispatchResult {
-			f(&mut self.config.debt)
 		}
 
 		/// Store the feed config in storage.
