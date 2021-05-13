@@ -10,6 +10,7 @@ mod benchmarking;
 mod mock;
 #[cfg(test)]
 mod tests;
+pub mod traits;
 
 pub mod default_weights;
 mod utils;
@@ -23,6 +24,7 @@ pub mod pallet {
 		dispatch::{DispatchError, DispatchResult, HasCompact},
 		ensure,
 		pallet_prelude::*,
+		require_transactional,
 		weights::Weight,
 		PalletId, Parameter, RuntimeDebug,
 	};
@@ -35,7 +37,10 @@ pub mod pallet {
 	use sp_std::convert::{TryFrom, TryInto};
 	use sp_std::prelude::*;
 
-	use crate::utils::{median, with_transaction_result};
+	use crate::{
+		traits::OnAnswerHandler,
+		utils::{median, with_transaction_result},
+	};
 
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -50,24 +55,43 @@ pub mod pallet {
 		BlockNumber: Parameter,
 		Value: Parameter,
 	> {
+		/// Owner of this feed
 		pub owner: AccountId,
+		/// The pending owner of this feed
 		pub pending_owner: Option<AccountId>,
+		/// Value bounds of oracle submissions
 		pub submission_value_bounds: (Value, Value),
+		/// Count bounds of oracle submissions
 		pub submission_count_bounds: (u32, u32),
+		/// Payment of oracle rounds
 		pub payment: Balance,
+		/// Timeout of rounds
 		pub timeout: BlockNumber,
+		/// Represents the number of decimals with which the feed is configured
 		pub decimals: u8,
+		/// The description of this feed
 		pub description: Vec<u8>,
+		/// The round initiation delay
 		pub restart_delay: RoundId,
 		/// The round oracles are currently reporting data for.
 		pub reporting_round: RoundId,
+		/// The id of the latest round
 		pub latest_round: RoundId,
+		/// The id of the first round that contains non-default data
 		pub first_valid_round: Option<RoundId>,
+		/// The amount of the oracles in this feed
 		pub oracle_count: u32,
 		/// Number of rounds to keep in storage for this feed.
 		pub pruning_window: RoundId,
 		/// Keeps track of the round that should be pruned next.
 		pub next_round_to_prune: RoundId,
+		/// Tracks the amount of debt accumulated by the feed
+		/// towards the oracles.
+		pub debt: Balance,
+		/// The maximum allowed debt a feed can accumulate
+		///
+		/// If this is a `None` value, the feed is not allowed to accumulate any debt
+		pub max_debt: Option<Balance>,
 	}
 
 	pub type FeedConfigOf<T> = FeedConfig<
@@ -196,6 +220,19 @@ pub mod pallet {
 		}
 	}
 
+	impl<B, V> RoundData<B, V> {
+		/// Hard to use `Into` trait directly due to:
+		/// https://doc.rust-lang.org/reference/items/traits.html#object-safety
+		fn into_round(self) -> Round<B, V> {
+			Round {
+				started_at: self.started_at,
+				answer: Some(self.answer),
+				updated_at: Some(self.updated_at),
+				answered_in_round: Some(self.answered_in_round),
+			}
+		}
+	}
+
 	/// Trait for interacting with the feeds in the pallet.
 	pub trait FeedOracle<T: frame_system::Config> {
 		type FeedId: Parameter + BaseArithmetic;
@@ -278,6 +315,9 @@ pub mod pallet {
 		/// Maximum number of feeds.
 		type FeedLimit: Get<Self::FeedId>;
 
+		/// This callback will trigger when the round answer updates
+		type OnAnswerHandler: OnAnswerHandler<Self>;
+
 		/// The weight for this pallet's extrinsics.
 		type WeightInfo: WeightInfo;
 	}
@@ -295,11 +335,6 @@ pub mod pallet {
 	// possible optimization: put together with admin?
 	/// The account to set as future pallet admin.
 	pub type PendingPalletAdmin<T: Config> = StorageValue<_, T::AccountId>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn debt)]
-	/// Tracks the amount of debt accrued by the pallet towards the oracles.
-	pub type Debt<T> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn feed_counter)]
@@ -422,6 +457,13 @@ pub mod pallet {
 		FeedCreator(T::AccountId),
 		/// The account is no longer allowed to create feeds. \[previously_creator\]
 		FeedCreatorRemoved(T::AccountId),
+		#[cfg(test)]
+		/// New round data
+		///
+		/// Note:
+		///
+		/// This is only for tests
+		NewData(T::FeedId, RoundData<T::BlockNumber, T::Value>),
 	}
 
 	#[pallet::error]
@@ -499,10 +541,28 @@ pub mod pallet {
 		InvalidRound,
 		/// The calling account is not allowed to create feeds.
 		NotFeedCreator,
+		/// The maximum debt of feeds was reached.
+		MaxDebtReached,
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+
+	impl<T: Config> Pallet<T> {
+		/// Shortcut for getting account ID
+		fn account_id() -> T::AccountId {
+			T::PalletId::get().into_account()
+		}
+
+		/// Get debt by FeedId
+		pub fn debt(feed_id: T::FeedId) -> Result<BalanceOf<T>, Error<T>> {
+			if let Some(feed_config) = <Feeds<T>>::get(feed_id) {
+				Ok(feed_config.debt)
+			} else {
+				Err(<Error<T>>::FeedNotFound)
+			}
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -523,6 +583,7 @@ pub mod pallet {
 			restart_delay: RoundId,
 			oracles: Vec<(T::AccountId, T::AccountId)>,
 			pruning_window: Option<RoundId>,
+			max_debt: Option<BalanceOf<T>>,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
 			ensure!(
@@ -564,6 +625,8 @@ pub mod pallet {
 					oracle_count: Zero::zero(),
 					pruning_window,
 					next_round_to_prune: RoundId::one(),
+					debt: Zero::zero(),
+					max_debt,
 				};
 				let mut feed = Feed::<T>::new(id, new_config); // synced on drop
 				let started_at = frame_system::Pallet::<T>::block_number();
@@ -738,14 +801,18 @@ pub mod pallet {
 				// update round answer
 				let (min_count, max_count) = details.submission_count_bounds;
 				if details.submissions.len() >= min_count as usize {
-					let new_answer = median(&mut details.submissions);
-					let mut round =
-						Self::round(feed_id, round_id).ok_or(Error::<T>::RoundNotFound)?;
-					round.answer = Some(new_answer);
 					let updated_at = frame_system::Pallet::<T>::block_number();
-					round.updated_at = Some(updated_at);
-					round.answered_in_round = Some(round_id);
-					Rounds::<T>::insert(feed_id, round_id, round);
+					let new_answer = median(&mut details.submissions);
+					let round = RoundData {
+						started_at: Self::round(feed_id, round_id)
+							.ok_or(Error::<T>::RoundNotFound)?
+							.started_at,
+						answer: new_answer,
+						updated_at,
+						answered_in_round: round_id,
+					};
+
+					Rounds::<T>::insert(feed_id, round_id, round.clone().into_round());
 
 					feed.config.latest_round = round_id;
 					if feed.config.first_valid_round.is_none() {
@@ -759,6 +826,7 @@ pub mod pallet {
 					// prune the oldest round
 					feed.prune_oldest();
 
+					T::OnAnswerHandler::on_answer(feed_id, round);
 					Self::deposit_event(Event::AnswerUpdated(
 						feed_id, round_id, new_answer, updated_at,
 					));
@@ -766,15 +834,22 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
-				T::Currency::reserve(&T::PalletId::get().into_account(), payment).or_else(
+				// track the debt in case we cannot reserve
+				T::Currency::reserve(&Self::account_id(), payment).or_else(
 					|_| -> DispatchResult {
 						// track the debt in case we cannot reserve
-						Debt::<T>::try_mutate(|debt| {
-							*debt = debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
-							Ok(())
-						})
+						let mut new_debt = feed.config.debt;
+						new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
+
+						if let Some(max_debt) = feed.config.max_debt {
+							ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
+						}
+
+						feed.config.debt = new_debt;
+						Ok(())
 					},
 				)?;
+
 				let mut oracle_meta = Self::oracle(&oracle).ok_or(Error::<T>::OracleNotFound)?;
 				oracle_meta.withdrawable = oracle_meta
 					.withdrawable
@@ -825,13 +900,20 @@ pub mod pallet {
 			timeout: T::BlockNumber,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
-			// synced on drop
-			let mut feed = Feed::<T>::load_from(feed_id).ok_or(Error::<T>::FeedNotFound)?;
-			feed.ensure_owner(&owner)?;
+			with_transaction_result(|| {
+				// synced on drop
+				let mut feed = Feed::<T>::load_from(feed_id).ok_or(Error::<T>::FeedNotFound)?;
+				feed.ensure_owner(&owner)?;
 
-			feed.update_future_rounds(payment, submission_count_bounds, restart_delay, timeout)?;
+				feed.update_future_rounds(
+					payment,
+					submission_count_bounds,
+					restart_delay,
+					timeout,
+				)?;
 
-			Ok(().into())
+				Ok(().into())
+			})
 		}
 
 		// --- feed: round requests ---
@@ -1035,16 +1117,16 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::reduce_debt())]
 		pub fn reduce_debt(
 			origin: OriginFor<T>,
+			feed_id: T::FeedId,
 			amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let _sender = ensure_signed(origin)?;
-			Debt::<T>::try_mutate(|debt| -> DispatchResult {
-				let to_reserve = amount.min(*debt);
-				T::Currency::reserve(&T::PalletId::get().into_account(), to_reserve)?;
-				// it's fine if we saturate to 0 debt
-				*debt = debt.saturating_sub(amount);
-				Ok(())
-			})?;
+			let mut feed = <Feed<T>>::load_from(feed_id).ok_or(<Error<T>>::FeedNotFound)?;
+
+			let to_reserve = amount.min(feed.config.debt);
+			T::Currency::reserve(&Self::account_id(), to_reserve)?;
+			// it's fine if we saturate to 0 debt
+			feed.config.debt = feed.config.debt.saturating_sub(amount);
 
 			Ok(().into())
 		}
@@ -1326,10 +1408,7 @@ pub mod pallet {
 		// --- mutators ---
 
 		/// Add the given oracles to the feed.
-		///
-		/// **Warning:** Fallible function that changes storage.
-		// TODO: use [require_transactional](https://github.com/paritytech/substrate/issues/7004)
-		// after migrating to Substrate v3 for this and others.
+		#[require_transactional]
 		pub fn add_oracles(&mut self, to_add: Vec<(T::AccountId, T::AccountId)>) -> DispatchResult {
 			let new_count = self
 				.oracle_count()
@@ -1386,8 +1465,7 @@ pub mod pallet {
 		}
 
 		/// Disable the given oracles.
-		///
-		/// **Warning:** Fallible function that changes storage.
+		#[require_transactional]
 		fn disable_oracles(&mut self, to_disable: Vec<T::AccountId>) -> DispatchResult {
 			let disabled_count = to_disable.len() as u32;
 			self.config.oracle_count = self
@@ -1407,8 +1485,7 @@ pub mod pallet {
 
 		/// Update the configuration for future oracle rounds.
 		/// (Past and present rounds are unaffected.)
-		///
-		/// **Warning:** Fallible function that changes storage.
+		#[require_transactional]
 		pub fn update_future_rounds(
 			&mut self,
 			payment: BalanceOf<T>,
@@ -1469,6 +1546,7 @@ pub mod pallet {
 		/// Will prune the oldest round that is outside the pruning window
 		///
 		/// **Warning:** Fallible function that changes storage.
+		#[require_transactional]
 		fn initialize_round(
 			&mut self,
 			new_round_id: RoundId,
@@ -1497,8 +1575,7 @@ pub mod pallet {
 		}
 
 		/// Close a timed out round and remove its details.
-		///
-		/// **Warning:** Fallible function that changes storage.
+		#[require_transactional]
 		fn close_timed_out_round(&self, timed_out_id: RoundId) -> DispatchResult {
 			let prev_id = timed_out_id.saturating_sub(One::one());
 			let prev_round = self.round(prev_id).ok_or(Error::<T>::RoundNotFound)?;
@@ -1584,8 +1661,7 @@ pub mod pallet {
 		/// Requests that a new round be started for the feed.
 		///
 		/// Returns `Ok` on success and `Err` in case the round could not be started.
-		///
-		/// **Warning:** Fallible function that changes storage.
+		#[require_transactional]
 		fn request_new_round(&mut self, requester: T::AccountId) -> DispatchResult {
 			let new_round = self
 				.reporting_round_id()

@@ -92,6 +92,12 @@ parameter_types! {
 type FeedId = u16;
 type Value = u64;
 
+impl pallet_chainlink_feed::traits::OnAnswerHandler<Test> for Test {
+	fn on_answer(feed: FeedId, new_data: RoundData<BlockNumber, Value>) {
+		ChainlinkFeed::deposit_event(pallet_chainlink_feed::Event::NewData(feed, new_data));
+	}
+}
+
 impl pallet_chainlink_feed::Config for Test {
 	type Event = Event;
 	type FeedId = FeedId;
@@ -100,6 +106,7 @@ impl pallet_chainlink_feed::Config for Test {
 	type PalletId = FeedPalletId;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
+	type OnAnswerHandler = Self;
 	type OracleCountLimit = OracleLimit;
 	type FeedLimit = FeedLimit;
 	type WeightInfo = ();
@@ -116,6 +123,7 @@ pub(crate) struct FeedBuilder {
 	restart_delay: Option<RoundId>,
 	oracles: Option<Vec<(AccountId, AccountId)>>,
 	pruning_window: Option<RoundId>,
+	max_debt: Option<Balance>,
 }
 
 impl FeedBuilder {
@@ -168,6 +176,11 @@ impl FeedBuilder {
 		self
 	}
 
+	pub fn max_debt(mut self, v: Balance) -> Self {
+		self.max_debt = Some(v);
+		self
+	}
+
 	pub fn build_and_store(self) -> DispatchResultWithPostInfo {
 		let owner = Origin::signed(self.owner.unwrap_or(1));
 		let payment = self.payment.unwrap_or(20);
@@ -180,6 +193,7 @@ impl FeedBuilder {
 		let restart_delay = self
 			.restart_delay
 			.unwrap_or(oracles.len().saturating_sub(1) as u32);
+		let max_debt = self.max_debt;
 		ChainlinkFeed::create_feed(
 			owner,
 			payment,
@@ -191,6 +205,7 @@ impl FeedBuilder {
 			restart_delay,
 			oracles,
 			self.pruning_window,
+			max_debt,
 		)
 	}
 }
@@ -216,4 +231,15 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	.unwrap();
 
 	t.into()
+}
+
+#[macro_export]
+macro_rules! tx_assert_ok {
+	($e:expr) => {
+		with_transaction_result(|| -> Result<(), ()> {
+			assert_ok!($e);
+			Ok(())
+		})
+		.unwrap();
+	};
 }

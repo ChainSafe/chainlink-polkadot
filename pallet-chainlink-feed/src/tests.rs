@@ -1,10 +1,10 @@
 use super::*;
-use crate::{mock::*, Error};
-use frame_support::sp_runtime::traits::AccountIdConversion;
-use frame_support::traits::Currency;
+use crate::{mock::*, utils::with_transaction_result, Error};
 use frame_support::{
 	assert_noop, assert_ok,
+	sp_runtime::traits::AccountIdConversion,
 	sp_runtime::traits::{One, Zero},
+	traits::Currency,
 };
 
 type Balances = pallet_balances::Pallet<Test>;
@@ -22,7 +22,8 @@ fn feed_creation_should_work() {
 			b"desc".to_vec(),
 			2,
 			vec![(1, 4), (2, 4), (3, 4)],
-			None
+			None,
+			None,
 		));
 	});
 }
@@ -137,6 +138,60 @@ fn submit_should_work() {
 		let oracle_status =
 			ChainlinkFeed::oracle_status(feed_id, oracle).expect("oracle status should be present");
 		assert_eq!(oracle_status.latest_submission, Some(submission));
+	});
+}
+
+#[test]
+fn on_answer_callback_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+
+		let payment = 20;
+		let timeout = 10;
+		let min_submissions = 1;
+		let oracles = vec![(1, 4), (2, 4)];
+		assert_ok!(FeedBuilder::new()
+			.payment(payment)
+			.timeout(timeout)
+			.min_submissions(min_submissions)
+			.oracles(oracles)
+			.build_and_store());
+
+		let feed_id = 0;
+		let round_id = 1;
+		let oracle = 2;
+		let submission = 42;
+		assert_ok!(ChainlinkFeed::submit(
+			Origin::signed(oracle),
+			feed_id,
+			round_id,
+			submission
+		));
+
+		assert_eq!(
+			System::events()
+				.into_iter()
+				.map(|r| r.event)
+				.filter_map(|e| {
+					if let mock::Event::pallet_chainlink_feed(crate::Event::NewData(feed, data)) = e
+					{
+						Some((feed, data))
+					} else {
+						None
+					}
+				})
+				.last()
+				.unwrap(),
+			(
+				0,
+				RoundData {
+					started_at: 1,
+					answer: 42,
+					updated_at: 1,
+					answered_in_round: 1
+				}
+			)
+		);
 	});
 }
 
@@ -374,7 +429,7 @@ fn change_oracles_should_work() {
 		);
 
 		{
-			assert_ok!(ChainlinkFeed::feed_mut(feed_id)
+			tx_assert_ok!(ChainlinkFeed::feed_mut(feed_id)
 				.unwrap()
 				.request_new_round(AccountId::default()));
 		}
@@ -532,7 +587,7 @@ fn update_future_rounds_should_work() {
 		);
 
 		// successful update
-		assert_ok!(ChainlinkFeed::update_future_rounds(
+		tx_assert_ok!(ChainlinkFeed::update_future_rounds(
 			Origin::signed(owner),
 			feed_id,
 			new_payment,
@@ -841,7 +896,7 @@ fn feed_oracle_trait_should_work() {
 				}
 			);
 
-			assert_ok!(feed.request_new_round(AccountId::default()));
+			tx_assert_ok!(feed.request_new_round(AccountId::default()));
 		}
 		let round_id = 2;
 		let round =
@@ -974,7 +1029,8 @@ fn auto_prune_should_work() {
 				b"desc".to_vec(),
 				2,
 				vec![(1, 4), (2, 4), (3, 4)],
-				Some(0)
+				Some(0),
+				None,
 			),
 			Error::<Test>::CannotPruneRoundZero
 		);
@@ -1083,6 +1139,7 @@ fn feed_creation_permissioning() {
 #[test]
 fn can_go_into_debt_and_repay() {
 	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
 		let admin: AccountId = FeedPalletId::get().into_account();
 		let owner = 1;
 		let oracle = 2;
@@ -1091,23 +1148,24 @@ fn can_go_into_debt_and_repay() {
 			.payment(payment)
 			.owner(owner)
 			.oracles(vec![(oracle, 3), (3, 3)])
+			.max_debt(42)
 			.build_and_store());
-		assert_eq!(ChainlinkFeed::debt(), 0);
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), 0);
 		// ensure the fund is out of tokens
 		Balances::make_free_balance_be(&admin, ExistentialDeposit::get());
 		assert_ok!(ChainlinkFeed::submit(Origin::signed(oracle), 0, 1, 42));
-		assert_eq!(ChainlinkFeed::debt(), payment);
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), payment);
 		let new_funds = 2 * payment;
 		Balances::make_free_balance_be(&admin, new_funds);
 		// should be possible to reduce debt partially
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(admin), 10));
+		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(admin), 0, 10));
 		assert_eq!(Balances::free_balance(admin), new_funds - 10);
-		assert_eq!(ChainlinkFeed::debt(), payment - 10);
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), payment - 10);
 		// should be possible to overshoot in passing the amount correcting debt...
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(42), payment));
+		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(42), 0, payment));
 		// ... but will only correct the debt
 		assert_eq!(Balances::free_balance(admin), new_funds - payment);
-		assert_eq!(ChainlinkFeed::debt(), 0);
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), 0);
 	});
 }
 
@@ -1139,12 +1197,14 @@ fn feed_life_cylce() {
 			oracle_count: Zero::zero(),
 			next_round_to_prune: One::one(),
 			pruning_window: RoundId::MAX,
+			debt: Zero::zero(),
+			max_debt: None,
 		};
 		let oracles = vec![(2, 2), (3, 3), (4, 4)];
 		{
 			let mut feed = Feed::<Test>::new(id, new_config.clone());
-			assert_ok!(feed.add_oracles(oracles.clone()));
-			assert_ok!(feed.update_future_rounds(
+			tx_assert_ok!(feed.add_oracles(oracles.clone()));
+			tx_assert_ok!(feed.update_future_rounds(
 				payment,
 				submission_count_bounds,
 				restart_delay,
@@ -1183,7 +1243,7 @@ fn feed_life_cylce() {
 		);
 		{
 			let mut feed = ChainlinkFeed::feed_mut(id).expect("feed should be there");
-			assert_ok!(feed.request_new_round(AccountId::default()));
+			tx_assert_ok!(feed.request_new_round(AccountId::default()));
 		}
 		assert_eq!(ChainlinkFeed::feed_config(id).unwrap().reporting_round, 1);
 	});
