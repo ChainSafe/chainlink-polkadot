@@ -1020,9 +1020,6 @@ fn auto_prune_should_work() {
 
 		System::set_block_number(3);
 		submit_a_and_b(3);
-		System::set_block_number(4);
-		submit_a_and_b(4);
-
 		assert!(ChainlinkFeed::round(feed_id, 0).is_some());
 		// only oldest round is pruned
 		assert!(ChainlinkFeed::round(feed_id, 1).is_none());
@@ -1032,11 +1029,21 @@ fn auto_prune_should_work() {
 		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
 		assert_eq!(feed.first_valid_round(), Some(2));
 
-		System::set_block_number(5);
-		submit_a_and_b(5);
+		System::set_block_number(4);
+		submit_a_and_b(4);
 		assert!(ChainlinkFeed::round(feed_id, 2).is_none());
 		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
 		assert_eq!(feed.first_valid_round(), Some(3));
+
+		// shrink pruning window
+		assert_ok!(ChainlinkFeed::set_pruning_window(
+			Origin::signed(owner),
+			feed_id,
+			1
+		));
+		let feed = ChainlinkFeed::feed(feed_id).expect("feed should be there");
+		assert_eq!(feed.first_valid_round(), Some(4));
+		assert!(ChainlinkFeed::round(feed_id, 3).is_none());
 	});
 }
 
