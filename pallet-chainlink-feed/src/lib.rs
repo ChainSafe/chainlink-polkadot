@@ -76,7 +76,7 @@ pub mod pallet {
 		pub first_valid_round: Option<RoundId>,
 		/// The amount of the oracles in this feed
 		pub oracle_count: u32,
-		/// Tracks the amount of debt accrued by the feed
+		/// Tracks the amount of debt accumulated by the feed
 		/// towards the oracles.
 		pub debt: Balance,
 		/// The maximum allowed debt a feed can accumulate
