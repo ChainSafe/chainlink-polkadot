@@ -24,6 +24,16 @@ impl crate::WeightInfo for () {
 			.saturating_add(DbWeight::get().reads(1 as Weight))
 			.saturating_add(DbWeight::get().writes(1 as Weight))
 	}
+	fn set_pruning_window(n: u32) -> Weight {
+		(1_000 as Weight)
+			.saturating_add(DbWeight::get().reads(1 as Weight))
+			.saturating_add(DbWeight::get().writes(1 as Weight))
+			.saturating_add(
+				DbWeight::get()
+					.writes(2 as Weight)
+					.saturating_mul(n as Weight),
+			)
+	}
 	fn submit_opening_round_answers() -> Weight {
 		(442_347_000 as Weight)
 			.saturating_add(DbWeight::get().reads(7 as Weight))

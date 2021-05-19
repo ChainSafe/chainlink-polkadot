@@ -701,7 +701,7 @@ pub mod pallet {
 		/// Updates the pruning window of an existing feed
 		///
 		/// - Will prune rounds if the given window is smaller than the existing one.
-		#[pallet::weight(1_000)]
+		#[pallet::weight(T::WeightInfo::set_pruning_window(<Feed<T>>::load_from(*feed_id).unwrap().current_window().saturating_sub(*pruning_window)))]
 		pub fn set_pruning_window(
 			origin: OriginFor<T>,
 			feed_id: T::FeedId,
@@ -1263,6 +1263,7 @@ pub mod pallet {
 	/// Proxy used for interaction with a feed.
 	/// `should_sync` flag determines whether the `config` is put into
 	/// storage on `drop`.
+	#[derive(Default)]
 	pub struct Feed<T: Config> {
 		pub id: T::FeedId,
 		pub config: FeedConfigOf<T>,
@@ -1523,13 +1524,20 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Count current the old rounds of an existing feed
+		fn current_window(&self) -> u32 {
+			self.config
+				.latest_round
+				.saturating_sub(self.config.next_round_to_prune)
+		}
+
 		/// Prune the state of a feed to reduce storage load.
 		///
 		/// Returns `true` if round was pruned, `false otherwise`
 		fn prune_oldest(&mut self) -> bool {
 			let prune_next = self.config.next_round_to_prune;
 			// only prune if window is exceeded
-			if self.config.latest_round.saturating_sub(prune_next) >= self.config.pruning_window {
+			if self.current_window() >= self.config.pruning_window {
 				Rounds::<T>::remove(self.id, prune_next);
 				Details::<T>::remove(self.id, prune_next);
 				// update oldest round
@@ -1684,6 +1692,7 @@ pub mod pallet {
 		fn create_feed(o: u32) -> Weight;
 		fn transfer_ownership() -> Weight;
 		fn accept_ownership() -> Weight;
+		fn set_pruning_window(n: u32) -> Weight;
 		fn submit_opening_round_answers() -> Weight;
 		fn submit_closing_answer(o: u32) -> Weight;
 		fn change_oracles(d: u32, n: u32) -> Weight;
