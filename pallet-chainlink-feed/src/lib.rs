@@ -1313,7 +1313,7 @@ pub mod pallet {
 		///
 		/// This function is only for determining weights for
 		/// extrinsic `set_pruning_window`
-		pub fn count_overflow_windows(id: T::FeedId, pruning_window: RoundId) -> RoundId {
+		pub fn count_overflow_windows(id: T::FeedId, pruning_window: RoundId) -> u32 {
 			if let Some(config) = Feeds::<T>::get(id) {
 				Self {
 					id,
@@ -1324,7 +1324,7 @@ pub mod pallet {
 			} else {
 				0
 			}
-			.saturating_sub(pruning_window)
+			.saturating_sub(pruning_window) as u32
 		}
 
 		// --- getters ---
