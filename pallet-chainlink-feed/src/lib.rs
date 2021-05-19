@@ -701,7 +701,8 @@ pub mod pallet {
 		/// Updates the pruning window of an existing feed
 		///
 		/// - Will prune rounds if the given window is smaller than the existing one.
-		#[pallet::weight(T::WeightInfo::set_pruning_window(<Feed<T>>::load_from(*feed_id).unwrap().current_window().saturating_sub(*pruning_window)))]
+		#[pallet::weight(T::WeightInfo::set_pruning_window(
+            <Feed<T>>::count_overflow_windows(*feed_id, *pruning_window)))]
 		pub fn set_pruning_window(
 			origin: OriginFor<T>,
 			feed_id: T::FeedId,
@@ -1304,6 +1305,26 @@ pub mod pallet {
 				config,
 				should_sync: true,
 			})
+		}
+
+		/// Wrapping `current_window` outside this struct
+		///
+		/// NOTE:
+		///
+		/// This function is only for determining weights for
+		/// extrinsic `set_pruning_window`
+		pub fn count_overflow_windows(id: T::FeedId, pruning_window: RoundId) -> RoundId {
+			if let Some(config) = Feeds::<T>::get(id) {
+				Self {
+					id,
+					config,
+					should_sync: false,
+				}
+				.current_window()
+			} else {
+				0
+			}
+			.saturating_sub(pruning_window)
 		}
 
 		// --- getters ---
