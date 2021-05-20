@@ -52,6 +52,16 @@ impl pallet_chainlink_feed::WeightInfo for WeightInfo {
 			.saturating_add(DbWeight::get().reads(1 as Weight))
 			.saturating_add(DbWeight::get().writes(1 as Weight))
 	}
+    fn set_pruning_window(n: u32) -> Weight {
+		(1_000 as Weight)
+			.saturating_add(DbWeight::get().reads(1 as Weight))
+			.saturating_add(DbWeight::get().writes(1 as Weight))
+			.saturating_add(
+				DbWeight::get()
+					.writes(2 as Weight)
+					.saturating_mul(n as Weight),
+			)
+	}
 	fn set_requester() -> Weight {
 		(99_375_000 as Weight)
 			.saturating_add(DbWeight::get().reads(2 as Weight))

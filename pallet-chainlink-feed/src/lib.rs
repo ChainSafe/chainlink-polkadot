@@ -1573,8 +1573,6 @@ pub mod pallet {
 		/// Initialize a new round.
 		/// Will close the previous one if it is timed out.
 		/// Will prune the oldest round that is outside the pruning window
-		///
-		/// **Warning:** Fallible function that changes storage.
 		#[require_transactional]
 		fn initialize_round(
 			&mut self,
