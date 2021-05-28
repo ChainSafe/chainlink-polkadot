@@ -18,8 +18,8 @@ mod utils;
 #[frame_support::pallet]
 pub mod pallet {
 	use codec::{Decode, Encode};
+	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_support::traits::{Currency, ExistenceRequirement, Get, ReservableCurrency};
-	use frame_support::{dispatch::DispatchResultWithPostInfo, weights::DispatchClass};
 	use frame_support::{
 		dispatch::{DispatchError, DispatchResult, HasCompact},
 		ensure,
@@ -38,6 +38,7 @@ pub mod pallet {
 	use sp_std::prelude::*;
 
 	use crate::{
+		default_weights::SubmitWeight,
 		traits::OnAnswerHandler,
 		utils::{median, with_transaction_result},
 	};
@@ -737,11 +738,15 @@ pub mod pallet {
 		/// - Removes the details for the previous round if it was superseded.
 		///
 		/// Limited to the oracles of a feed.
-		#[pallet::weight((
-            T::WeightInfo::submit_opening_round_answers().max(
-		        T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
-		    ), DispatchClass::Operational,
-        ))]
+		#[pallet::weight(
+            SubmitWeight {
+                weight: T::WeightInfo::submit_opening_round_answers().max(
+		            T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
+                ),
+                origin,
+                feed_id,
+                round_id: *round_id,
+            })]
 		pub fn submit(
 			origin: OriginFor<T>,
 			#[pallet::compact] feed_id: T::FeedId,
@@ -1343,7 +1348,11 @@ pub mod pallet {
 		}
 
 		/// Make sure that the given oracle can submit data for the given round.
-		fn ensure_valid_round(&self, oracle: &T::AccountId, round_id: RoundId) -> DispatchResult {
+		pub fn ensure_valid_round(
+			&self,
+			oracle: &T::AccountId,
+			round_id: RoundId,
+		) -> DispatchResult {
 			let o = self.status(oracle).ok_or(Error::<T>::NotOracle)?;
 
 			ensure!(o.starting_round <= round_id, Error::<T>::OracleNotEnabled);

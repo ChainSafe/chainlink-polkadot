@@ -3,7 +3,55 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use frame_support::weights::{constants::RocksDbWeight as DbWeight, Weight};
+use crate::{Config, Feed, RoundId};
+use codec::Encode;
+use frame_support::weights::{
+	constants::RocksDbWeight as DbWeight, ClassifyDispatch, DispatchClass, Pays, PaysFee,
+	WeighData, Weight,
+};
+use frame_system::{ensure_signed, pallet_prelude::OriginFor};
+
+/// Weight of `submit`
+pub struct SubmitWeight<T: Config> {
+	/// Custom weight
+	pub weight: Weight,
+	/// Origin account
+	pub origin: OriginFor<T>,
+	/// Feed id
+	pub feed_id: T::FeedId,
+	/// Round id
+	pub round_id: RoundId,
+}
+
+impl<T: Encode, C: Config> WeighData<T> for SubmitWeight<C> {
+	fn weigh_data(&self, _target: T) -> Weight {
+		self.weight
+	}
+}
+
+impl<T: Encode, C: Config> ClassifyDispatch<T> for SubmitWeight<C> {
+	fn classify_dispatch(&self, _target: T) -> DispatchClass {
+		DispatchClass::Operational
+	}
+}
+
+impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
+	fn pays_fee(&self, _target: T) -> Pays {
+		if let Ok(account) = ensure_signed(self.origin.clone()) {
+			<Feed<C>>::load_from(self.feed_id)
+				.map(|feed| {
+					if feed.ensure_valid_round(&account, self.round_id).is_ok() {
+						Pays::Yes
+					} else {
+						Pays::No
+					}
+				})
+				.unwrap_or(Pays::No)
+		} else {
+			Pays::No
+		}
+	}
+}
 
 impl crate::WeightInfo for () {
 	fn create_feed(o: u32) -> Weight {
