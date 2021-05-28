@@ -3,11 +3,14 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use crate::{Config, Feed, RoundId};
+use crate::{Config, Feed, RoundId, SubmitPaysFee};
 use codec::Encode;
-use frame_support::weights::{
-	constants::RocksDbWeight as DbWeight, ClassifyDispatch, DispatchClass, Pays, PaysFee,
-	WeighData, Weight,
+use frame_support::{
+	traits::Get,
+	weights::{
+		constants::RocksDbWeight as DbWeight, ClassifyDispatch, DispatchClass, Pays, PaysFee,
+		WeighData, Weight,
+	},
 };
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 
@@ -53,15 +56,19 @@ impl<T: Encode, C: Config> ClassifyDispatch<T> for SubmitWeight<C> {
 
 impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
 	fn pays_fee(&self, _target: T) -> Pays {
-		<Feed<C>>::load_from(self.feed_id)
-			.map(|feed| {
-				if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
-					Pays::Yes
-				} else {
-					Pays::No
-				}
-			})
-			.unwrap_or(Pays::No)
+		match C::SubmitPaysFee::get() {
+			SubmitPaysFee::Yes => Pays::Yes,
+			SubmitPaysFee::No => Pays::No,
+			SubmitPaysFee::Auto => <Feed<C>>::load_from(self.feed_id)
+				.map(|feed| {
+					if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
+						Pays::Yes
+					} else {
+						Pays::No
+					}
+				})
+				.unwrap_or(Pays::No),
+		}
 	}
 }
 

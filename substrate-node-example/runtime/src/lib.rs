@@ -304,6 +304,7 @@ impl pallet_chainlink_feed::Config for Runtime {
 	type FeedLimit = FeedLimit;
 	type OnAnswerHandler = ();
 	type WeightInfo = ChainlinkWeightInfo;
+    type SubmitPaysFee = pallet_chainlink_feed::SubmitPaysFee::Auto;
 }
 
 /// Configure the template pallet in pallets/template.

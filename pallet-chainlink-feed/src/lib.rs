@@ -43,6 +43,13 @@ pub mod pallet {
 		utils::{median, with_transaction_result},
 	};
 
+	/// Configuration for submiting paysfee
+	pub enum SubmitPaysFee {
+		Yes,
+		No,
+		Auto,
+	}
+
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -321,6 +328,9 @@ pub mod pallet {
 
 		/// The weight for this pallet's extrinsics.
 		type WeightInfo: WeightInfo;
+
+		/// If enable PaysFee in submit call
+		type SubmitPaysFee: Get<SubmitPaysFee>;
 	}
 
 	#[pallet::pallet]

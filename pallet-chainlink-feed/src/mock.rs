@@ -87,6 +87,7 @@ parameter_types! {
 	pub const StringLimit: u32 = 15;
 	pub const OracleLimit: u32 = 10;
 	pub const FeedLimit: u16 = 10;
+	pub const PaysFeeConf: pallet_chainlink_feed::SubmitPaysFee = pallet_chainlink_feed::SubmitPaysFee::Auto;
 }
 
 type FeedId = u16;
@@ -110,6 +111,7 @@ impl pallet_chainlink_feed::Config for Test {
 	type OracleCountLimit = OracleLimit;
 	type FeedLimit = FeedLimit;
 	type WeightInfo = ();
+	type SubmitPaysFee = PaysFeeConf;
 }
 
 #[derive(Debug, Default)]
