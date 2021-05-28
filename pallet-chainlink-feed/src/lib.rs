@@ -18,8 +18,8 @@ mod utils;
 #[frame_support::pallet]
 pub mod pallet {
 	use codec::{Decode, Encode};
-	use frame_support::dispatch::DispatchResultWithPostInfo;
 	use frame_support::traits::{Currency, ExistenceRequirement, Get, ReservableCurrency};
+	use frame_support::{dispatch::DispatchResultWithPostInfo, weights::DispatchClass};
 	use frame_support::{
 		dispatch::{DispatchError, DispatchResult, HasCompact},
 		ensure,
@@ -737,9 +737,11 @@ pub mod pallet {
 		/// - Removes the details for the previous round if it was superseded.
 		///
 		/// Limited to the oracles of a feed.
-		#[pallet::weight(T::WeightInfo::submit_opening_round_answers().max(
-		T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
-		))]
+		#[pallet::weight((
+            T::WeightInfo::submit_opening_round_answers().max(
+		        T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
+		    ), DispatchClass::Operational,
+        ))]
 		pub fn submit(
 			origin: OriginFor<T>,
 			#[pallet::compact] feed_id: T::FeedId,
@@ -1365,7 +1367,8 @@ pub mod pallet {
 				Error::<T>::InvalidRound
 			);
 			ensure!(
-				round_id == RoundId::one() || self.is_supersedable(round_id.saturating_sub(One::one())),
+				round_id == RoundId::one()
+					|| self.is_supersedable(round_id.saturating_sub(One::one())),
 				Error::<T>::NotSupersedable
 			);
 			Ok(())
