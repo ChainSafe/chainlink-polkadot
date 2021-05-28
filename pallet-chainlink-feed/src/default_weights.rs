@@ -15,12 +15,28 @@ use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 pub struct SubmitWeight<T: Config> {
 	/// Custom weight
 	pub weight: Weight,
-	/// Origin account
-	pub origin: OriginFor<T>,
-	/// Feed id
+	/// Oracle account
+	pub oracle: T::AccountId,
+	/// Feed ID
 	pub feed_id: T::FeedId,
-	/// Round id
+	/// Round ID
 	pub round_id: RoundId,
+}
+
+impl<T: Config> SubmitWeight<T> {
+	pub fn new(
+		weight: Weight,
+		oracle: T::AccountId,
+		feed_id: T::FeedId,
+		round_id: RoundId,
+	) -> Self {
+		Self {
+			weight,
+			oracle,
+			feed_id,
+			round_id,
+		}
+	}
 }
 
 impl<T: Encode, C: Config> WeighData<T> for SubmitWeight<C> {
@@ -37,19 +53,15 @@ impl<T: Encode, C: Config> ClassifyDispatch<T> for SubmitWeight<C> {
 
 impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
 	fn pays_fee(&self, _target: T) -> Pays {
-		if let Ok(account) = ensure_signed(self.origin.clone()) {
-			<Feed<C>>::load_from(self.feed_id)
-				.map(|feed| {
-					if feed.ensure_valid_round(&account, self.round_id).is_ok() {
-						Pays::Yes
-					} else {
-						Pays::No
-					}
-				})
-				.unwrap_or(Pays::No)
-		} else {
-			Pays::No
-		}
+		<Feed<C>>::load_from(self.feed_id)
+			.map(|feed| {
+				if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
+					Pays::Yes
+				} else {
+					Pays::No
+				}
+			})
+			.unwrap_or(Pays::No)
 	}
 }
 

@@ -739,21 +739,28 @@ pub mod pallet {
 		///
 		/// Limited to the oracles of a feed.
 		#[pallet::weight(
-            SubmitWeight {
-                weight: T::WeightInfo::submit_opening_round_answers().max(
+            <SubmitWeight<T>>::new(
+                T::WeightInfo::submit_opening_round_answers().max(
 		            T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
                 ),
-                origin,
-                feed_id,
-                round_id: *round_id,
-            })]
+                oracle.clone(),
+                *feed_id,
+                *round_id,
+            ))]
 		pub fn submit(
 			origin: OriginFor<T>,
+			// Specified oracle account
+			//
+			// TODO:
+			//
+			// This field is for calculating weights currently, remove this
+			// field after https://github.com/paritytech/substrate/issues/6316
+			oracle: T::AccountId,
 			#[pallet::compact] feed_id: T::FeedId,
 			#[pallet::compact] round_id: RoundId,
 			#[pallet::compact] submission: T::Value,
 		) -> DispatchResultWithPostInfo {
-			let oracle = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 
 			with_transaction_result(|| -> DispatchResultWithPostInfo {
 				let mut feed = Feed::<T>::load_from(feed_id).ok_or(Error::<T>::FeedNotFound)?;
