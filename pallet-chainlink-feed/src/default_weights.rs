@@ -3,7 +3,7 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use crate::{Config, Feed, RoundId, SubmitPaysFee};
+use crate::{Config, Feed, RoundId, SubmitterPaysFee};
 use codec::Encode;
 use frame_support::{
 	traits::Get,
@@ -56,10 +56,9 @@ impl<T: Encode, C: Config> ClassifyDispatch<T> for SubmitWeight<C> {
 
 impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
 	fn pays_fee(&self, _target: T) -> Pays {
-		match C::SubmitPaysFee::get() {
-			SubmitPaysFee::Yes => Pays::Yes,
-			SubmitPaysFee::No => Pays::No,
-			SubmitPaysFee::Auto => <Feed<C>>::load_from(self.feed_id)
+		match C::SubmitterPaysFee::get() {
+			SubmitterPaysFee::Always => Pays::Yes,
+			SubmitterPaysFee::FreeForValidRound => <Feed<C>>::load_from(self.feed_id)
 				.map(|feed| {
 					if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
 						Pays::Yes

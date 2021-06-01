@@ -44,10 +44,9 @@ pub mod pallet {
 	};
 
 	/// Configuration for submiting paysfee
-	pub enum SubmitPaysFee {
-		Yes,
-		No,
-		Auto,
+	pub enum SubmitterPaysFee {
+		Always,
+		FreeForValidRound,
 	}
 
 	pub type BalanceOf<T> =
@@ -330,7 +329,7 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 
 		/// If enable PaysFee in submit call
-		type SubmitPaysFee: Get<SubmitPaysFee>;
+		type SubmitterPaysFee: Get<SubmitterPaysFee>;
 	}
 
 	#[pallet::pallet]
