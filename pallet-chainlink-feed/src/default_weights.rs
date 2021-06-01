@@ -61,9 +61,9 @@ impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
 			SubmitterPaysFee::FreeForValidRound => <Feed<C>>::load_from(self.feed_id)
 				.map(|feed| {
 					if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
-						Pays::Yes
-					} else {
 						Pays::No
+					} else {
+						Pays::Yes
 					}
 				})
 				.unwrap_or(Pays::No),
