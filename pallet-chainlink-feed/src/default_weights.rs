@@ -4,11 +4,7 @@
 #![allow(unused_imports)]
 
 use crate::{Config, Feed, RoundId, SubmitterPaysFee};
-use codec::Encode;
-use frame_support::{
-	traits::Get,
-	weights::{constants::RocksDbWeight as DbWeight, WeighData, Weight},
-};
+use frame_support::weights::{constants::RocksDbWeight as DbWeight, WeighData, Weight};
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 
 impl crate::WeightInfo for () {
