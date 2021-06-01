@@ -3,9 +3,7 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use crate::{Config, Feed, RoundId, SubmitterPaysFee};
 use frame_support::weights::{constants::RocksDbWeight as DbWeight, WeighData, Weight};
-use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 
 impl crate::WeightInfo for () {
 	fn create_feed(o: u32) -> Weight {
