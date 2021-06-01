@@ -102,14 +102,14 @@ fn submit_should_work() {
 		let oracle = 2;
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
-			Origin::signed(oracle.clone()),
+			Origin::signed(oracle),
 			feed_id,
 			round_id,
 			submission
 		));
 		let second_oracle = 3;
 		assert_ok!(ChainlinkFeed::submit(
-			Origin::signed(second_oracle.clone()),
+			Origin::signed(second_oracle),
 			feed_id,
 			round_id,
 			submission
@@ -162,7 +162,7 @@ fn on_answer_callback_works() {
 		let oracle = 2;
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
-			Origin::signed(oracle.clone()),
+			Origin::signed(oracle),
 			feed_id,
 			round_id,
 			submission
@@ -218,7 +218,7 @@ fn details_are_cleared() {
 			let submission = 42;
 			let answer = submission;
 			assert_ok!(ChainlinkFeed::submit(
-				Origin::signed(oracle.clone()),
+				Origin::signed(oracle),
 				feed_id,
 				r,
 				submission
@@ -250,7 +250,7 @@ fn details_are_cleared() {
 				submission
 			));
 			assert_ok!(ChainlinkFeed::submit(
-				Origin::signed(oracle.clone()),
+				Origin::signed(oracle),
 				feed_id,
 				r,
 				submission
@@ -332,7 +332,7 @@ fn change_oracles_should_work() {
 		let round = 1;
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
-			Origin::signed(oracle.clone()),
+			Origin::signed(oracle),
 			feed_id,
 			round,
 			submission
