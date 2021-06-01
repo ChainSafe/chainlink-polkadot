@@ -7,69 +7,9 @@ use crate::{Config, Feed, RoundId, SubmitterPaysFee};
 use codec::Encode;
 use frame_support::{
 	traits::Get,
-	weights::{
-		constants::RocksDbWeight as DbWeight, ClassifyDispatch, DispatchClass, Pays, PaysFee,
-		WeighData, Weight,
-	},
+	weights::{constants::RocksDbWeight as DbWeight, WeighData, Weight},
 };
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
-
-/// Weight of `submit`
-pub struct SubmitWeight<T: Config> {
-	/// Custom weight
-	pub weight: Weight,
-	/// Oracle account
-	pub oracle: T::AccountId,
-	/// Feed ID
-	pub feed_id: T::FeedId,
-	/// Round ID
-	pub round_id: RoundId,
-}
-
-impl<T: Config> SubmitWeight<T> {
-	pub fn new(
-		weight: Weight,
-		oracle: T::AccountId,
-		feed_id: T::FeedId,
-		round_id: RoundId,
-	) -> Self {
-		Self {
-			weight,
-			oracle,
-			feed_id,
-			round_id,
-		}
-	}
-}
-
-impl<T: Encode, C: Config> WeighData<T> for SubmitWeight<C> {
-	fn weigh_data(&self, _target: T) -> Weight {
-		self.weight
-	}
-}
-
-impl<T: Encode, C: Config> ClassifyDispatch<T> for SubmitWeight<C> {
-	fn classify_dispatch(&self, _target: T) -> DispatchClass {
-		DispatchClass::Operational
-	}
-}
-
-impl<T: Encode, C: Config> PaysFee<T> for SubmitWeight<C> {
-	fn pays_fee(&self, _target: T) -> Pays {
-		match C::SubmitterPaysFee::get() {
-			SubmitterPaysFee::Always => Pays::Yes,
-			SubmitterPaysFee::FreeForValidRound => <Feed<C>>::load_from(self.feed_id)
-				.map(|feed| {
-					if feed.ensure_valid_round(&self.oracle, self.round_id).is_ok() {
-						Pays::No
-					} else {
-						Pays::Yes
-					}
-				})
-				.unwrap_or(Pays::No),
-		}
-	}
-}
 
 impl crate::WeightInfo for () {
 	fn create_feed(o: u32) -> Weight {

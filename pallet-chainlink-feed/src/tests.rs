@@ -103,7 +103,6 @@ fn submit_should_work() {
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(oracle.clone()),
-			oracle,
 			feed_id,
 			round_id,
 			submission
@@ -111,7 +110,6 @@ fn submit_should_work() {
 		let second_oracle = 3;
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(second_oracle.clone()),
-			second_oracle,
 			feed_id,
 			round_id,
 			submission
@@ -165,7 +163,6 @@ fn on_answer_callback_works() {
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(oracle.clone()),
-			oracle,
 			feed_id,
 			round_id,
 			submission
@@ -222,14 +219,12 @@ fn details_are_cleared() {
 			let answer = submission;
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(oracle.clone()),
-				oracle,
 				feed_id,
 				r,
 				submission
 			));
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(snd_oracle.clone()),
-				snd_oracle,
 				feed_id,
 				r,
 				submission
@@ -250,14 +245,12 @@ fn details_are_cleared() {
 			// to start a new round
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(snd_oracle),
-				snd_oracle,
 				feed_id,
 				r,
 				submission
 			));
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(oracle.clone()),
-				oracle,
 				feed_id,
 				r,
 				submission
@@ -289,51 +282,27 @@ fn submit_failure_cases() {
 		let round_id = 1;
 		let submission = 42;
 		assert_noop!(
-			ChainlinkFeed::submit(
-				Origin::signed(oracle),
-				oracle,
-				no_feed,
-				round_id,
-				submission
-			),
+			ChainlinkFeed::submit(Origin::signed(oracle), no_feed, round_id, submission),
 			Error::<Test>::FeedNotFound
 		);
 		let not_oracle = 1337;
 		assert_noop!(
-			ChainlinkFeed::submit(
-				Origin::signed(not_oracle),
-				not_oracle,
-				feed_id,
-				round_id,
-				submission
-			),
+			ChainlinkFeed::submit(Origin::signed(not_oracle), feed_id, round_id, submission),
 			Error::<Test>::NotOracle
 		);
 		let invalid_round = 1337;
 		assert_noop!(
-			ChainlinkFeed::submit(
-				Origin::signed(oracle),
-				oracle,
-				feed_id,
-				invalid_round,
-				submission
-			),
-			Error::<Test>::InvalidRound
+			ChainlinkFeed::submit(Origin::signed(oracle), feed_id, invalid_round, submission),
+			Error::<Test>::NotAcceptingSubmissions
 		);
 		let low_value = 0;
 		assert_noop!(
-			ChainlinkFeed::submit(Origin::signed(oracle), oracle, feed_id, round_id, low_value,),
+			ChainlinkFeed::submit(Origin::signed(oracle), feed_id, round_id, low_value,),
 			Error::<Test>::SubmissionBelowMinimum
 		);
 		let high_value = 13377331;
 		assert_noop!(
-			ChainlinkFeed::submit(
-				Origin::signed(oracle),
-				oracle,
-				feed_id,
-				round_id,
-				high_value,
-			),
+			ChainlinkFeed::submit(Origin::signed(oracle), feed_id, round_id, high_value,),
 			Error::<Test>::SubmissionAboveMaximum
 		);
 	});
@@ -364,7 +333,6 @@ fn change_oracles_should_work() {
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(oracle.clone()),
-			oracle,
 			feed_id,
 			round,
 			submission
@@ -904,14 +872,12 @@ fn feed_oracle_trait_should_work() {
 		let submission = 42;
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(oracle),
-			oracle,
 			feed_id,
 			round_id,
 			submission
 		));
 		assert_ok!(ChainlinkFeed::submit(
 			Origin::signed(second_oracle),
-			second_oracle,
 			feed_id,
 			round_id,
 			submission
@@ -1072,7 +1038,6 @@ fn auto_prune_should_work() {
 		let submit_a = |r| {
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(oracle_a),
-				oracle_a,
 				feed_id,
 				r,
 				submission
@@ -1082,7 +1047,6 @@ fn auto_prune_should_work() {
 			submit_a(r);
 			assert_ok!(ChainlinkFeed::submit(
 				Origin::signed(oracle_b),
-				oracle_b,
 				feed_id,
 				r,
 				submission
@@ -1189,13 +1153,7 @@ fn can_go_into_debt_and_repay() {
 		assert_eq!(ChainlinkFeed::debt(0).unwrap(), 0);
 		// ensure the fund is out of tokens
 		Balances::make_free_balance_be(&admin, ExistentialDeposit::get());
-		assert_ok!(ChainlinkFeed::submit(
-			Origin::signed(oracle),
-			oracle,
-			0,
-			1,
-			42
-		));
+		assert_ok!(ChainlinkFeed::submit(Origin::signed(oracle), 0, 1, 42));
 		assert_eq!(ChainlinkFeed::debt(0).unwrap(), payment);
 		let new_funds = 2 * payment;
 		Balances::make_free_balance_be(&admin, new_funds);

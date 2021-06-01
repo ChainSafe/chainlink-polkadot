@@ -145,7 +145,6 @@ benchmarks! {
 		// create the previous round that will be closed
 		assert_is_ok(ChainlinkFeed::<T>::submit(
 			RawOrigin::Signed(other_oracle.clone()).into(),
-			other_oracle,
 			feed,
 			prev_round,
 			answer
@@ -157,7 +156,6 @@ benchmarks! {
 		T::Currency::make_free_balance_be(&fund_account, Zero::zero());
 	}: submit(
 		RawOrigin::Signed(oracle.clone()),
-		oracle.clone(),
 		feed,
 		round,
 		answer
@@ -207,13 +205,13 @@ benchmarks! {
 		let other_oracle = oracles.iter().nth(1).map(|(o, _a)| o.clone()).expect("there should be a second oracle");
 		// create the previous round that will be closed
 		for (o, _a) in oracles.iter() {
-			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(o.clone()).into(), o.clone(), feed, prev_round, answer));
+			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(o.clone()).into(), feed, prev_round, answer));
 		}
 		// advance the block number so we can supersede the prev round
 		frame_system::Pallet::<T>::set_block_number(1u8.into());
 		let round: RoundId = 2;
 		for (o, _a) in oracles.iter().skip(1) {
-			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(o.clone()).into(), o.clone(), feed, round, answer));
+			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(o.clone()).into(), feed, round, answer));
 		}
 		assert_eq!(ChainlinkFeed::<T>::round(feed, round), Some(Round::new(One::one())));
 		// make sure we hit the `Debt` storage item
@@ -221,7 +219,6 @@ benchmarks! {
 		T::Currency::make_free_balance_be(&fund_account, Zero::zero());
 	}: submit(
 		RawOrigin::Signed(oracle.clone()),
-		oracle.clone(),
 		feed,
 		round,
 		answer
@@ -393,7 +390,6 @@ benchmarks! {
 		let oracle = oracles.first().map(|(o, _a)| o.clone()).expect("first oracle should be there");
 		assert_is_ok(ChainlinkFeed::<T>::submit(
 			RawOrigin::Signed(oracle.clone()).into(),
-			oracle.clone(),
 			feed,
 			round,
 			answer
@@ -440,7 +436,6 @@ benchmarks! {
 		let oracle = oracles.first().map(|(o, _a)| o.clone()).expect("first oracle should be there");
 		assert_is_ok(ChainlinkFeed::<T>::submit(
 			RawOrigin::Signed(oracle.clone()).into(),
-			oracle.clone(),
 			feed,
 			round,
 			answer
@@ -554,7 +549,7 @@ benchmarks! {
 		let fund_account = T::PalletId::get().into_account();
 		T::Currency::make_free_balance_be(&fund_account, Zero::zero());
 		for round in 1..(rounds + 1) {
-			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(oracle.clone()).into(), oracle.clone(), feed, round, answer));
+			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(oracle.clone()).into(), feed, round, answer));
 		}
 		let rounds: BalanceOf<T> = rounds.into();
 		let debt: BalanceOf<T> = rounds * payment;

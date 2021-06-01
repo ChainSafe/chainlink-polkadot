@@ -38,14 +38,15 @@ pub mod pallet {
 	use sp_std::prelude::*;
 
 	use crate::{
-		default_weights::SubmitWeight,
 		traits::OnAnswerHandler,
 		utils::{median, with_transaction_result},
 	};
 
 	/// Configuration for submiting paysfee
 	pub enum SubmitterPaysFee {
+		/// Always pays for the transaction
 		Always,
+		/// No pays for valid round
 		FreeForValidRound,
 	}
 
@@ -747,35 +748,35 @@ pub mod pallet {
 		/// - Removes the details for the previous round if it was superseded.
 		///
 		/// Limited to the oracles of a feed.
-		#[pallet::weight(
-            <SubmitWeight<T>>::new(
-                T::WeightInfo::submit_opening_round_answers().max(
-		            T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
-                ),
-                oracle.clone(),
-                *feed_id,
-                *round_id,
-            ))]
+		#[pallet::weight((T::WeightInfo::submit_opening_round_answers().max(
+		    T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
+		), DispatchClass::Operational))]
 		pub fn submit(
 			origin: OriginFor<T>,
-			// Specified oracle account
-			//
-			// TODO:
-			//
-			// This field is for calculating weights currently, remove this
-			// field after https://github.com/paritytech/substrate/issues/6316
-			oracle: T::AccountId,
 			#[pallet::compact] feed_id: T::FeedId,
 			#[pallet::compact] round_id: RoundId,
 			#[pallet::compact] submission: T::Value,
 		) -> DispatchResultWithPostInfo {
-			ensure_signed(origin)?;
+			let oracle = ensure_signed(origin)?;
 
 			with_transaction_result(|| -> DispatchResultWithPostInfo {
 				let mut feed = Feed::<T>::load_from(feed_id).ok_or(Error::<T>::FeedNotFound)?;
 				let mut oracle_status =
 					Self::oracle_status(feed_id, &oracle).ok_or(Error::<T>::NotOracle)?;
-				feed.ensure_valid_round(&oracle, round_id)?;
+
+				// Conditional PaysFee
+				let pays = match T::SubmitterPaysFee::get() {
+					SubmitterPaysFee::Always => Pays::Yes,
+					SubmitterPaysFee::FreeForValidRound => <Feed<T>>::load_from(feed_id)
+						.map(|feed| {
+							if feed.ensure_valid_round(&oracle, round_id).is_ok() {
+								Pays::No
+							} else {
+								Pays::Yes
+							}
+						})
+						.unwrap_or(Pays::Yes),
+				};
 
 				let (min_val, max_val) = feed.config.submission_value_bounds;
 				ensure!(submission >= min_val, Error::<T>::SubmissionBelowMinimum);
@@ -885,7 +886,7 @@ pub mod pallet {
 					Details::<T>::insert(feed_id, round_id, details);
 				}
 
-				Ok(().into())
+				Ok((None, pays).into())
 			})
 		}
 
