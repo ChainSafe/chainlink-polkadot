@@ -42,6 +42,14 @@ pub mod pallet {
 		utils::{median, with_transaction_result},
 	};
 
+	/// Configuration for submiting paysfee
+	pub enum SubmitterPaysFee {
+		/// Always pays for the transaction
+		Always,
+		/// No pays for valid submission
+		FreeForValidSubmission,
+	}
+
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -320,6 +328,9 @@ pub mod pallet {
 
 		/// The weight for this pallet's extrinsics.
 		type WeightInfo: WeightInfo;
+
+		/// If enable PaysFee in submit call
+		type SubmitterPaysFee: Get<SubmitterPaysFee>;
 	}
 
 	#[pallet::pallet]
@@ -580,9 +591,9 @@ pub mod pallet {
 			min_submissions: u32,
 			decimals: u8,
 			description: Vec<u8>,
-			restart_delay: u32,
+			restart_delay: RoundId,
 			oracles: Vec<(T::AccountId, T::AccountId)>,
-			pruning_window: Option<u32>,
+			pruning_window: Option<RoundId>,
 			max_debt: Option<BalanceOf<T>>,
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
@@ -597,7 +608,7 @@ pub mod pallet {
 
 			let pruning_window = pruning_window.unwrap_or(RoundId::MAX);
 			ensure!(
-				pruning_window > Zero::zero(),
+				pruning_window > RoundId::zero(),
 				Error::<T>::CannotPruneRoundZero
 			);
 
@@ -624,7 +635,7 @@ pub mod pallet {
 					first_valid_round: None,
 					oracle_count: Zero::zero(),
 					pruning_window,
-					next_round_to_prune: One::one(),
+					next_round_to_prune: RoundId::one(),
 					debt: Zero::zero(),
 					max_debt,
 				};
@@ -709,7 +720,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let owner = ensure_signed(origin)?;
 			ensure!(
-				pruning_window > Zero::zero(),
+				pruning_window > RoundId::zero(),
 				Error::<T>::CannotPruneRoundZero
 			);
 
@@ -737,9 +748,9 @@ pub mod pallet {
 		/// - Removes the details for the previous round if it was superseded.
 		///
 		/// Limited to the oracles of a feed.
-		#[pallet::weight(T::WeightInfo::submit_opening_round_answers().max(
-		T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
-		))]
+		#[pallet::weight((T::WeightInfo::submit_opening_round_answers().max(
+		    T::WeightInfo::submit_closing_answer(T::OracleCountLimit::get())
+		), DispatchClass::Operational))]
 		pub fn submit(
 			origin: OriginFor<T>,
 			#[pallet::compact] feed_id: T::FeedId,
@@ -862,7 +873,14 @@ pub mod pallet {
 					Details::<T>::insert(feed_id, round_id, details);
 				}
 
-				Ok(().into())
+				Ok((
+					None,
+					match T::SubmitterPaysFee::get() {
+						SubmitterPaysFee::Always => Pays::Yes,
+						SubmitterPaysFee::FreeForValidSubmission => Pays::No,
+					},
+				)
+					.into())
 			})
 		}
 
@@ -1341,7 +1359,11 @@ pub mod pallet {
 		}
 
 		/// Make sure that the given oracle can submit data for the given round.
-		fn ensure_valid_round(&self, oracle: &T::AccountId, round_id: RoundId) -> DispatchResult {
+		pub fn ensure_valid_round(
+			&self,
+			oracle: &T::AccountId,
+			round_id: RoundId,
+		) -> DispatchResult {
 			let o = self.status(oracle).ok_or(Error::<T>::NotOracle)?;
 
 			ensure!(o.starting_round <= round_id, Error::<T>::OracleNotEnabled);
@@ -1365,7 +1387,8 @@ pub mod pallet {
 				Error::<T>::InvalidRound
 			);
 			ensure!(
-				round_id == RoundId::one() || self.is_supersedable(round_id.saturating_sub(One::one())),
+				round_id == RoundId::one()
+					|| self.is_supersedable(round_id.saturating_sub(One::one())),
 				Error::<T>::NotSupersedable
 			);
 			Ok(())
@@ -1401,7 +1424,7 @@ pub mod pallet {
 		/// Check whether the round can be superseded by the next one.
 		/// Returns `false` for rounds not present in storage.
 		fn is_supersedable(&self, round: RoundId) -> bool {
-			round.is_zero() || self.was_updated(round) || self.is_timed_out(round)
+			round == RoundId::zero() || self.was_updated(round) || self.is_timed_out(round)
 		}
 
 		// --- mutators ---
