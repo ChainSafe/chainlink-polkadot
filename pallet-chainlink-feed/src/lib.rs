@@ -46,8 +46,8 @@ pub mod pallet {
 	pub enum SubmitterPaysFee {
 		/// Always pays for the transaction
 		Always,
-		/// No pays for valid round
-		FreeForValidRound,
+		/// No pays for valid submission
+		FreeForValidSubmission,
 	}
 
 	pub type BalanceOf<T> =
@@ -763,6 +763,7 @@ pub mod pallet {
 				let mut feed = Feed::<T>::load_from(feed_id).ok_or(Error::<T>::FeedNotFound)?;
 				let mut oracle_status =
 					Self::oracle_status(feed_id, &oracle).ok_or(Error::<T>::NotOracle)?;
+				feed.ensure_valid_round(&oracle, round_id)?;
 
 				let (min_val, max_val) = feed.config.submission_value_bounds;
 				ensure!(submission >= min_val, Error::<T>::SubmissionBelowMinimum);
@@ -876,15 +877,7 @@ pub mod pallet {
 					None,
 					match T::SubmitterPaysFee::get() {
 						SubmitterPaysFee::Always => Pays::Yes,
-						SubmitterPaysFee::FreeForValidRound => <Feed<T>>::load_from(feed_id)
-							.map(|feed| {
-								if feed.ensure_valid_round(&oracle, round_id).is_ok() {
-									Pays::No
-								} else {
-									Pays::Yes
-								}
-							})
-							.unwrap_or(Pays::Yes),
+						SubmitterPaysFee::FreeForValidSubmission => Pays::No,
 					},
 				)
 					.into())
