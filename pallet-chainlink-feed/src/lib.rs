@@ -764,20 +764,6 @@ pub mod pallet {
 				let mut oracle_status =
 					Self::oracle_status(feed_id, &oracle).ok_or(Error::<T>::NotOracle)?;
 
-				// Conditional PaysFee
-				let pays = match T::SubmitterPaysFee::get() {
-					SubmitterPaysFee::Always => Pays::Yes,
-					SubmitterPaysFee::FreeForValidRound => <Feed<T>>::load_from(feed_id)
-						.map(|feed| {
-							if feed.ensure_valid_round(&oracle, round_id).is_ok() {
-								Pays::No
-							} else {
-								Pays::Yes
-							}
-						})
-						.unwrap_or(Pays::Yes),
-				};
-
 				let (min_val, max_val) = feed.config.submission_value_bounds;
 				ensure!(submission >= min_val, Error::<T>::SubmissionBelowMinimum);
 				ensure!(submission <= max_val, Error::<T>::SubmissionAboveMaximum);
@@ -886,7 +872,22 @@ pub mod pallet {
 					Details::<T>::insert(feed_id, round_id, details);
 				}
 
-				Ok((None, pays).into())
+				Ok((
+					None,
+					match T::SubmitterPaysFee::get() {
+						SubmitterPaysFee::Always => Pays::Yes,
+						SubmitterPaysFee::FreeForValidRound => <Feed<T>>::load_from(feed_id)
+							.map(|feed| {
+								if feed.ensure_valid_round(&oracle, round_id).is_ok() {
+									Pays::No
+								} else {
+									Pays::Yes
+								}
+							})
+							.unwrap_or(Pays::Yes),
+					},
+				)
+					.into())
 			})
 		}
 
