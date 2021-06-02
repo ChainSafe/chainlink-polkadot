@@ -293,7 +293,7 @@ fn submit_failure_cases() {
 		let invalid_round = 1337;
 		assert_noop!(
 			ChainlinkFeed::submit(Origin::signed(oracle), feed_id, invalid_round, submission),
-			Error::<Test>::NotAcceptingSubmissions
+			Error::<Test>::InvalidRound,
 		);
 		let low_value = 0;
 		assert_noop!(

@@ -3,7 +3,7 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use frame_support::weights::{constants::RocksDbWeight as DbWeight, WeighData, Weight};
+use frame_support::weights::{constants::RocksDbWeight as DbWeight, Weight};
 
 impl crate::WeightInfo for () {
 	fn create_feed(o: u32) -> Weight {
