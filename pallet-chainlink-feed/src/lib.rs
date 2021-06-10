@@ -1121,21 +1121,35 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Reduce the amount of debt in the pallet by moving funds from
-		/// the free balance to the reserved so oracles can be payed out.
-		#[pallet::weight(T::WeightInfo::reduce_debt())]
-		pub fn reduce_debt(
+		/// Transfers the the given amount from the sender to the pallet account and credit
+		/// the given feed by reducing any existing debt first and increasing the feed's
+		/// available funds.
+		#[pallet::weight(T::WeightInfo::fund_feed())]
+		pub fn fund_feed(
 			origin: OriginFor<T>,
 			feed_id: T::FeedId,
 			amount: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
-			let _sender = ensure_signed(origin)?;
+			let sender = ensure_signed(origin)?;
 			let mut feed = <Feed<T>>::load_from(feed_id).ok_or(<Error<T>>::FeedNotFound)?;
 
-			let to_reserve = amount.min(feed.config.debt);
-			T::Currency::reserve(&Self::account_id(), to_reserve)?;
-			// it's fine if we saturate to 0 debt
-			feed.config.debt = feed.config.debt.saturating_sub(amount);
+			T::Currency::transfer(
+				&sender,
+				&T::PalletId::get().into_account(),
+				amount,
+				ExistenceRequirement::AllowDeath,
+			)?;
+
+			if let Some(reduced_debt) = feed.config.debt.checked_sub(&amount) {
+				feed.config.debt = reduced_debt;
+			} else {
+				let funding = amount - feed.config.debt;
+				feed.config
+					.available_funds
+					.checked_add(&funding)
+					.ok_or(Error::<T>::Overflow)?;
+				feed.config.debt = Zero::zero();
+			}
 
 			Ok(().into())
 		}
@@ -1704,7 +1718,7 @@ pub mod pallet {
 		fn transfer_admin() -> Weight;
 		fn accept_admin() -> Weight;
 		fn withdraw_funds() -> Weight;
-		fn reduce_debt() -> Weight;
+		fn fund_feed() -> Weight;
 		fn transfer_pallet_admin() -> Weight;
 		fn accept_pallet_admin() -> Weight;
 		fn set_feed_creator() -> Weight;

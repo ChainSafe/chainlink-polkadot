@@ -502,7 +502,7 @@ benchmarks! {
 		assert_eq!(T::Currency::free_balance(&recipient), payment);
 	}
 
-	reduce_debt {
+	fund_feed {
 		let caller: T::AccountId = whitelisted_caller();
 		let pallet_admin: T::AccountId = ChainlinkFeed::<T>::pallet_admin();
 		assert_is_ok(ChainlinkFeed::<T>::set_feed_creator(RawOrigin::Signed(pallet_admin.clone()).into(), caller.clone()));
@@ -522,21 +522,13 @@ benchmarks! {
 			vec![(oracle.clone(), admin)],
 		));
 		let feed = Zero::zero();
-		let answer: T::Value = 42u8.into();
-		let rounds: RoundId = 4;
-		let fund_account = T::PalletId::get().into_account();
-		T::Currency::make_free_balance_be(&fund_account, Zero::zero());
-		for round in 1..(rounds + 1) {
-			assert_is_ok(ChainlinkFeed::<T>::submit(RawOrigin::Signed(oracle.clone()).into(), feed, round, answer));
-		}
-		let rounds: BalanceOf<T> = rounds.into();
-		let debt: BalanceOf<T> = rounds * payment;
-		assert_eq!(Debt::<T>::get(), debt);
-		T::Currency::make_free_balance_be(&fund_account, payment + payment);
+		let payment = 1_000;
+		T::Currency::make_free_balance_be(&caller, payment);
+		ChainlinkFeed::<T>::fund_feed(	RawOrigin::Signed(caller.clone()).into(),feed, payment);
 	}: _(RawOrigin::Signed(caller.clone()), payment)
 	verify {
 		assert_eq!(T::Currency::free_balance(&fund_account), payment);
-		assert_eq!(Debt::<T>::get(), debt - payment);
+		assert_eq!(ChainlinkFeed::<T>::available_funds(Zero::zero()), payment);
 	}
 
 	transfer_pallet_admin {
@@ -695,9 +687,9 @@ mod tests {
 	}
 
 	#[test]
-	fn reduce_debt() {
+	fn fund_feed() {
 		new_test_ext().execute_with(|| {
-			assert_ok!(test_benchmark_reduce_debt::<Test>());
+			assert_ok!(test_benchmark_fund_feed::<Test>());
 		});
 	}
 
