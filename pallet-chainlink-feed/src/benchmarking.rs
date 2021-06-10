@@ -527,7 +527,7 @@ benchmarks! {
 		ChainlinkFeed::<T>::fund_feed(	RawOrigin::Signed(caller.clone()).into(),feed, payment);
 	}: _(RawOrigin::Signed(caller.clone()), payment)
 	verify {
-		assert_eq!(T::Currency::free_balance(&fund_account), payment);
+		assert_eq!(T::Currency::free_balance(&caller), payment);
 		assert_eq!(ChainlinkFeed::<T>::available_funds(Zero::zero()), payment);
 	}
 
