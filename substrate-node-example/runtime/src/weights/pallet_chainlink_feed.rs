@@ -87,7 +87,7 @@ impl pallet_chainlink_feed::WeightInfo for WeightInfo {
 			.saturating_add(DbWeight::get().reads(3 as Weight))
 			.saturating_add(DbWeight::get().writes(2 as Weight))
 	}
-	fn reduce_debt() -> Weight {
+	fn fund_feed() -> Weight {
 		(118_115_000 as Weight)
 			.saturating_add(DbWeight::get().reads(2 as Weight))
 			.saturating_add(DbWeight::get().writes(2 as Weight))

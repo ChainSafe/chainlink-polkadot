@@ -1,11 +1,13 @@
-use super::*;
-use crate::{mock::*, utils::with_transaction_result, Error};
 use frame_support::{
 	assert_noop, assert_ok,
 	sp_runtime::traits::AccountIdConversion,
 	sp_runtime::traits::{One, Zero},
 	traits::Currency,
 };
+
+use crate::{mock::*, utils::with_transaction_result, Error};
+
+use super::*;
 
 type Balances = pallet_balances::Pallet<Test>;
 
@@ -82,6 +84,7 @@ fn feed_creation_failure_cases() {
 		);
 	});
 }
+
 #[test]
 fn submit_should_work() {
 	new_test_ext().execute_with(|| {
@@ -188,7 +191,7 @@ fn on_answer_callback_works() {
 					started_at: 1,
 					answer: 42,
 					updated_at: 1,
-					answered_in_round: 1
+					answered_in_round: 1,
 				}
 			)
 		);
@@ -686,7 +689,7 @@ fn request_new_round_should_work() {
 			requester_meta,
 			Requester {
 				delay,
-				last_started_round: None
+				last_started_round: None,
 			}
 		);
 		// failure cases
@@ -743,7 +746,7 @@ fn request_new_round_should_work() {
 			requester_meta,
 			Requester {
 				delay,
-				last_started_round: Some(1)
+				last_started_round: Some(1),
 			}
 		);
 	});
@@ -780,7 +783,7 @@ fn requester_permissions() {
 			requester_meta,
 			Requester {
 				delay,
-				last_started_round: None
+				last_started_round: None,
 			}
 		);
 		// failure cases
@@ -1156,16 +1159,50 @@ fn can_go_into_debt_and_repay() {
 		assert_ok!(ChainlinkFeed::submit(Origin::signed(oracle), 0, 1, 42));
 		assert_eq!(ChainlinkFeed::debt(0).unwrap(), payment);
 		let new_funds = 2 * payment;
-		Balances::make_free_balance_be(&admin, new_funds);
+		Balances::make_free_balance_be(&owner, new_funds);
 		// should be possible to reduce debt partially
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(admin), 0, 10));
-		assert_eq!(Balances::free_balance(admin), new_funds - 10);
+		assert_ok!(ChainlinkFeed::fund_feed(Origin::signed(owner), 0, 10));
+		assert_eq!(Balances::free_balance(owner), new_funds - 10);
 		assert_eq!(ChainlinkFeed::debt(0).unwrap(), payment - 10);
+		assert_eq!(ChainlinkFeed::available_funds(0).unwrap(), 0);
 		// should be possible to overshoot in passing the amount correcting debt...
-		assert_ok!(ChainlinkFeed::reduce_debt(Origin::signed(42), 0, payment));
-		// ... but will only correct the debt
-		assert_eq!(Balances::free_balance(admin), new_funds - payment);
+		assert_ok!(ChainlinkFeed::fund_feed(Origin::signed(owner), 0, payment));
+		// ... but will only correct the funding
+		assert_eq!(
+			Balances::free_balance(admin),
+			ExistentialDeposit::get() + 10 + payment
+		);
 		assert_eq!(ChainlinkFeed::debt(0).unwrap(), 0);
+		assert_eq!(ChainlinkFeed::available_funds(0).unwrap(), 10);
+	});
+}
+
+#[test]
+fn allows_submussions_until_max_debt() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let admin: AccountId = FeedPalletId::get().into_account();
+		let owner = 1;
+		let payment = 10;
+		let max_debt = 3 * payment;
+		let oracles = vec![(1, 4), (2, 4), (3, 4), (5, 4)];
+		assert_ok!(FeedBuilder::new()
+			.payment(payment)
+			.owner(owner)
+			.oracles(oracles)
+			.max_debt(max_debt)
+			.build_and_store());
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), 0);
+		// ensure the fund is out of tokens
+		Balances::make_free_balance_be(&admin, ExistentialDeposit::get());
+		assert_ok!(ChainlinkFeed::submit(Origin::signed(1), 0, 1, 42));
+		assert_ok!(ChainlinkFeed::submit(Origin::signed(2), 0, 1, 42));
+		assert_ok!(ChainlinkFeed::submit(Origin::signed(3), 0, 1, 42));
+		assert_noop!(
+			ChainlinkFeed::submit(Origin::signed(5), 0, 1, 42),
+			Error::<Test>::MaxDebtReached
+		);
+		assert_eq!(ChainlinkFeed::debt(0).unwrap(), max_debt);
 	});
 }
 
@@ -1185,6 +1222,7 @@ fn feed_life_cylce() {
 			owner,
 			pending_owner: None,
 			payment,
+			available_funds: Zero::zero(),
 			timeout,
 			submission_value_bounds,
 			submission_count_bounds,
