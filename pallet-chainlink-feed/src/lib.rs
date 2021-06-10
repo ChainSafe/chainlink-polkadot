@@ -65,6 +65,8 @@ pub mod pallet {
 		pub submission_count_bounds: (u32, u32),
 		/// Payment of oracle rounds
 		pub payment: Balance,
+		/// The remaining funds available to pay oracles
+		pub available_funds: Balance,
 		/// Timeout of rounds
 		pub timeout: BlockNumber,
 		/// Represents the number of decimals with which the feed is configured
@@ -562,6 +564,13 @@ pub mod pallet {
 				Err(<Error<T>>::FeedNotFound)
 			}
 		}
+
+		/// Available funds of a feed
+		pub fn available_funds(feed_id: T::FeedId) -> Result<BalanceOf<T>, Error<T>> {
+			<Feeds<T>>::get(feed_id)
+				.map(|feed| feed.available_funds)
+				.ok_or(<Error<T>>::FeedNotFound)
+		}
 	}
 
 	#[pallet::call]
@@ -612,6 +621,7 @@ pub mod pallet {
 				let new_config = FeedConfig {
 					owner: owner.clone(),
 					pending_owner: None,
+					available_funds: Zero::zero(),
 					payment,
 					timeout,
 					submission_value_bounds,
@@ -834,21 +844,21 @@ pub mod pallet {
 
 				// update oracle rewards and try to reserve them
 				let payment = details.payment;
-				// track the debt in case we cannot reserve
-				T::Currency::reserve(&Self::account_id(), payment).or_else(
-					|_| -> DispatchResult {
-						// track the debt in case we cannot reserve
-						let mut new_debt = feed.config.debt;
-						new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
+				// check if the feed still has enough funds to cover the payment
+				if let Some(remaining_funds) = feed.config.available_funds.checked_sub(&payment) {
+					T::Currency::reserve(&Self::account_id(), payment)?;
+					feed.config.available_funds = remaining_funds;
+				} else {
+					// track the debt in case we cannot reserve anymore funds
+					let mut new_debt = feed.config.debt;
+					new_debt = new_debt.checked_add(&payment).ok_or(Error::<T>::Overflow)?;
 
-						if let Some(max_debt) = feed.config.max_debt {
-							ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
-						}
+					if let Some(max_debt) = feed.config.max_debt {
+						ensure!(new_debt < max_debt, <Error<T>>::MaxDebtReached);
+					}
 
-						feed.config.debt = new_debt;
-						Ok(())
-					},
-				)?;
+					feed.config.debt = new_debt;
+				}
 
 				let mut oracle_meta = Self::oracle(&oracle).ok_or(Error::<T>::OracleNotFound)?;
 				oracle_meta.withdrawable = oracle_meta
@@ -1113,7 +1123,6 @@ pub mod pallet {
 
 		/// Reduce the amount of debt in the pallet by moving funds from
 		/// the free balance to the reserved so oracles can be payed out.
-		/// Limited to the pallet admin.
 		#[pallet::weight(T::WeightInfo::reduce_debt())]
 		pub fn reduce_debt(
 			origin: OriginFor<T>,
