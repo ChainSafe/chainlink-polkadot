@@ -18,7 +18,7 @@ mod benchmarking;
 pub mod pallet {
 	use frame_support::{dispatch::DispatchResultWithPostInfo, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
-	use pallet_chainlink_feed::{FeedInterface, FeedOracle, RoundId};
+	use pallet_chainlink_feed::{FeedInterface, FeedOracle, RoundData, RoundId};
 
 	type FeedValueFor<T> =
 		<<<T as Config>::Oracle as FeedOracle<T>>::Feed as FeedInterface<T>>::Value;
@@ -30,6 +30,12 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
 		type Oracle: FeedOracle<Self>;
+
+		/// Type for feed indexing.
+		type FeedId: Member + Parameter;
+
+		/// The oracle feed values.
+		type Value: Member + Parameter;
 	}
 
 	#[pallet::pallet]
@@ -43,6 +49,17 @@ pub mod pallet {
 	// Learn more about declaring storage items:
 	// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 	pub type Something<T> = StorageValue<_, u32>;
+
+	// Stores the last round for every feed
+	#[pallet::storage]
+	#[pallet::getter(fn last_rounds)]
+	pub type LastRounds<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		T::FeedId,
+		RoundData<T::BlockNumber, T::Value>,
+		OptionQuery,
+	>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/events

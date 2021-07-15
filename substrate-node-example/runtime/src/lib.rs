@@ -291,14 +291,28 @@ impl example::Config for Runtime {
 	type Callback = ExampleCall<Runtime>;
 }
 
+/// Configure the template pallet in pallets/template.
+impl pallet_template::Config for Runtime {
+	type Event = Event;
+	type Oracle = ChainlinkFeed;
+	type FeedId = FeedId;
+	type Value = Value;
+}
+
+use pallet_chainlink_feed::RoundData;
 pub type FeedId = u32;
 pub type Value = u128;
 
 parameter_types! {
-	pub const FeedPalletId: PalletId = PalletId(*b"linkfeed");
+	// Used to generate the fund account that pools oracle payments.
+	pub const FeedPallet: PalletId = PalletId(*b"linkfeed");
+	// The minimum amount of tokens to keep in reserve for oracle payment.
 	pub const MinimumReserve: Balance = ExistentialDeposit::get() * 1000;
+	// Maximum length of the feed description.
 	pub const StringLimit: u32 = 30;
+	// Maximum number of oracles per feed.
 	pub const OracleCountLimit: u32 = 25;
+	// Maximum number of feeds.
 	pub const FeedLimit: FeedId = 100;
 }
 
@@ -306,20 +320,28 @@ impl pallet_chainlink_feed::Config for Runtime {
 	type Event = Event;
 	type FeedId = FeedId;
 	type Value = Value;
+	// A module that provides currency functionality to manage
+	// oracle rewards. The native Balances in this example.
 	type Currency = Balances;
-	type PalletId = FeedPalletId;
+	type PalletId = FeedPallet;
 	type MinimumReserve = MinimumReserve;
 	type StringLimit = StringLimit;
 	type OracleCountLimit = OracleCountLimit;
 	type FeedLimit = FeedLimit;
-	type OnAnswerHandler = ();
-	type WeightInfo = ChainlinkWeightInfo<Runtime>;
+	// Provide your custom callback that gets called once a new value is available
+	// `()` is a noop, and `TemplateModule` uses a custom callback implementation
+	type OnAnswerHandler = TemplateModule;
+	// Implementation of the WeightInfo trait for your runtime.
+	// `()` provides Default weights but not recommended for production.
+	type WeightInfo = ();
 }
 
-/// Configure the template pallet in pallets/template.
-impl pallet_template::Config for Runtime {
-	type Event = Event;
-	type Oracle = ChainlinkFeed;
+/// This is called for each new available `RoundData` of a feed
+impl pallet_chainlink_feed::traits::OnAnswerHandler<Runtime> for TemplateModule {
+	fn on_answer(feed: FeedId, new_round: RoundData<BlockNumber, Value>) {
+		// inserts the round for the given feed id into the `LastRounds` storage map fo the Template module
+		pallet_template::LastRounds::<Runtime>::insert(feed, new_round)
+	}
 }
 
 parameter_types! {
